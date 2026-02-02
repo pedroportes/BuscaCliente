@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,8 @@ import {
   Eye, 
   EyeOff,
   TestTube,
-  Loader2
+  Loader2,
+  Mail,
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { EvolutionApiCard } from './EvolutionApiCard';
@@ -21,7 +22,10 @@ interface ApiIntegration {
   description: string;
   keyName: string;
   icon: React.ReactNode;
+  hasExtraConfig?: boolean;
 }
+
+const RESEND_STORAGE_KEY = 'resend_sender_email';
 
 const integrations: ApiIntegration[] = [
   {
@@ -43,7 +47,8 @@ const integrations: ApiIntegration[] = [
     name: 'Resend',
     description: 'Envio de emails transacionais',
     keyName: 'RESEND_API_KEY',
-    icon: <div className="p-2 rounded-lg bg-teal-500/10"><span className="text-teal-500 text-lg">📧</span></div>,
+    icon: <div className="p-2 rounded-lg bg-teal-500/10"><Mail className="w-5 h-5 text-teal-500" /></div>,
+    hasExtraConfig: true,
   },
 ];
 
@@ -53,6 +58,11 @@ export function IntegrationsTab() {
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({});
   const [testingConnection, setTestingConnection] = useState<string | null>(null);
   const [connectedApis, setConnectedApis] = useState<Record<string, boolean>>({});
+  
+  // Resend sender email configuration
+  const [resendSenderEmail, setResendSenderEmail] = useState(() => {
+    return localStorage.getItem(RESEND_STORAGE_KEY) || '';
+  });
 
   const handleApiKeyChange = (integrationId: string, value: string) => {
     setApiKeys(prev => ({ ...prev, [integrationId]: value }));
@@ -60,6 +70,11 @@ export function IntegrationsTab() {
 
   const toggleShowKey = (integrationId: string) => {
     setShowKeys(prev => ({ ...prev, [integrationId]: !prev[integrationId] }));
+  };
+
+  const handleResendEmailChange = (email: string) => {
+    setResendSenderEmail(email);
+    localStorage.setItem(RESEND_STORAGE_KEY, email);
   };
 
   const testConnection = async (integrationId: string) => {
@@ -162,6 +177,25 @@ export function IntegrationsTab() {
                 </Button>
               </div>
             </div>
+
+            {/* Extra configuration for Resend */}
+            {integration.id === 'resend' && (
+              <div className="space-y-2 pt-2 border-t">
+                <Label htmlFor="resend-sender" className="text-sm">
+                  Email Remetente
+                </Label>
+                <Input
+                  id="resend-sender"
+                  type="email"
+                  placeholder="noreply@seudominio.com"
+                  value={resendSenderEmail}
+                  onChange={(e) => handleResendEmailChange(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Este email deve pertencer a um domínio verificado no Resend.
+                </p>
+              </div>
+            )}
           </CardContent>
         </Card>
       ))}
