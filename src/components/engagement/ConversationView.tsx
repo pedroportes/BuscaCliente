@@ -26,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { formatPhoneForDisplay } from '@/lib/phoneUtils';
 
 interface ConversationViewProps {
   lead: Lead | null;
@@ -258,7 +259,7 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
           {lead.phone && (
             <Badge variant="secondary" className="text-xs">
               <Phone className="w-3 h-3 mr-1" />
-              {lead.phone}
+              {formatPhoneForDisplay(lead.phone)}
             </Badge>
           )}
           {lead.email && (

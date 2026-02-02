@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useToast } from '@/hooks/use-toast';
+import { normalizePhoneForWhatsApp, formatPhoneForDisplay, isValidWhatsAppNumber } from '@/lib/phoneUtils';
 
 interface EvolutionConfig {
   instanceUrl: string;
@@ -266,15 +267,17 @@ export function EvolutionProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    // Clean phone number - remove non-digits
-    const cleanPhone = phone.replace(/\D/g, '');
+    // Normalize phone number to international format (55DDDNNNNNNNNN)
+    const normalizedPhone = normalizePhoneForWhatsApp(phone);
     
-    if (!cleanPhone || cleanPhone.length < 10) {
+    if (!isValidWhatsAppNumber(normalizedPhone)) {
+      const displayPhone = formatPhoneForDisplay(phone);
       toast({
         title: 'Número inválido',
-        description: 'O número de telefone é inválido ou muito curto',
+        description: `O número ${displayPhone || phone} não está no formato correto. Use DDD + número.`,
         variant: 'destructive',
       });
+      addLog('error', `Número inválido: ${phone} -> ${normalizedPhone}`);
       return false;
     }
 
@@ -288,10 +291,10 @@ export function EvolutionProvider({ children }: { children: ReactNode }) {
     }
     
     try {
-      addLog('info', `Enviando mensagem para ${cleanPhone}...`);
+      addLog('info', `Enviando mensagem para ${normalizedPhone}...`);
       
       const response = await makeRequest(`message/sendText/${config.instanceName}`, 'POST', {
-        number: cleanPhone,
+        number: normalizedPhone,
         text: message.trim(),
       });
       
@@ -299,21 +302,21 @@ export function EvolutionProvider({ children }: { children: ReactNode }) {
       if (response?.response && Array.isArray(response.response)) {
         const numberStatus = response.response[0];
         if (numberStatus?.exists === false) {
-          const formattedNumber = cleanPhone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+          const displayPhone = formatPhoneForDisplay(phone);
           toast({
             title: 'Número não encontrado no WhatsApp',
-            description: `O número ${formattedNumber} não está registrado no WhatsApp`,
+            description: `O número ${displayPhone} não está registrado no WhatsApp`,
             variant: 'destructive',
           });
-          addLog('error', `Número ${cleanPhone} não encontrado no WhatsApp`);
+          addLog('error', `Número ${normalizedPhone} não encontrado no WhatsApp`);
           return false;
         }
       }
       
-      addLog('success', `Mensagem enviada para ${cleanPhone}`);
+      addLog('success', `Mensagem enviada para ${normalizedPhone}`);
       toast({
         title: 'Mensagem enviada!',
-        description: `Enviada com sucesso para ${cleanPhone}`,
+        description: `Enviada com sucesso para ${formatPhoneForDisplay(phone)}`,
       });
       return true;
     } catch (error) {
