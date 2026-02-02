@@ -19,18 +19,60 @@ function normalizePhone(phone: string): string {
   return cleaned;
 }
 
+// Generate all possible phone variants for matching
+function generatePhoneVariants(phone: string): string[] {
+  const cleaned = phone.replace(/\D/g, '');
+  const variants: string[] = [cleaned];
+  
+  // Without 55
+  if (cleaned.startsWith('55')) {
+    variants.push(cleaned.substring(2));
+  }
+  
+  // With 55
+  if (!cleaned.startsWith('55')) {
+    variants.push(`55${cleaned}`);
+  }
+  
+  // Extract just the last 8-9 digits (number without DDD)
+  const lastDigits = cleaned.slice(-9);
+  const lastDigits8 = cleaned.slice(-8);
+  
+  // For each variant, also try with/without the 9 prefix for mobile
+  const allVariants = [...variants];
+  for (const v of variants) {
+    // Get DDD (first 2 digits after removing 55)
+    const withoutCountry = v.startsWith('55') ? v.substring(2) : v;
+    const ddd = withoutCountry.substring(0, 2);
+    const number = withoutCountry.substring(2);
+    
+    // If number has 9 digits (with 9), try without 9
+    if (number.length === 9 && number.startsWith('9')) {
+      allVariants.push(`${ddd}${number.substring(1)}`);
+      allVariants.push(`55${ddd}${number.substring(1)}`);
+    }
+    // If number has 8 digits (without 9), try with 9
+    if (number.length === 8) {
+      allVariants.push(`${ddd}9${number}`);
+      allVariants.push(`55${ddd}9${number}`);
+    }
+  }
+  
+  // Add last digits variations
+  allVariants.push(lastDigits);
+  allVariants.push(lastDigits8);
+  
+  // Remove duplicates
+  return [...new Set(allVariants)];
+}
+
 // Find lead by phone number (try multiple formats)
 async function findLeadByPhone(supabase: any, phone: string): Promise<any | null> {
-  const normalizedPhone = normalizePhone(phone);
+  const variants = generatePhoneVariants(phone);
   
-  // Try to find with different formats
-  const phoneVariants = [
-    normalizedPhone,                      // DDD + number (e.g., 41984501037)
-    `55${normalizedPhone}`,               // With country code
-    normalizedPhone.replace(/^55/, ''),   // Without country code if starts with 55
-  ];
+  console.log(`Searching for phone variants: ${variants.join(', ')}`);
   
-  for (const variant of phoneVariants) {
+  for (const variant of variants) {
     // Search using LIKE to handle different storage formats
     const { data, error } = await supabase
       .from('leads')
@@ -40,6 +82,7 @@ async function findLeadByPhone(supabase: any, phone: string): Promise<any | null
       .single();
     
     if (data && !error) {
+      console.log(`Found lead with variant: ${variant}`);
       return data;
     }
   }
@@ -95,19 +138,27 @@ serve(async (req) => {
         );
       }
 
-      // Extract message content
-      const messageContent = messageData.message || {};
+      // Extract message content - handle nested structure from Evolution API
+      const messageContent = messageData.message || data.message || {};
       let body = '';
+      
+      console.log(`Message content structure: ${JSON.stringify(messageContent)}`);
       
       // Handle different message types
       if (messageContent.conversation) {
         body = messageContent.conversation;
+      } else if (typeof messageContent === 'string') {
+        body = messageContent;
       } else if (messageContent.extendedTextMessage?.text) {
         body = messageContent.extendedTextMessage.text;
       } else if (messageContent.imageMessage?.caption) {
-        body = `[Imagem] ${messageContent.imageMessage.caption}`;
+        body = `[Imagem] ${messageContent.imageMessage.caption || ''}`;
+      } else if (messageContent.imageMessage) {
+        body = '[Imagem]';
       } else if (messageContent.videoMessage?.caption) {
-        body = `[Vídeo] ${messageContent.videoMessage.caption}`;
+        body = `[Vídeo] ${messageContent.videoMessage.caption || ''}`;
+      } else if (messageContent.videoMessage) {
+        body = '[Vídeo]';
       } else if (messageContent.audioMessage) {
         body = '[Áudio]';
       } else if (messageContent.documentMessage) {
@@ -118,11 +169,21 @@ serve(async (req) => {
         body = `[Contato] ${messageContent.contactMessage.displayName || ''}`;
       } else if (messageContent.locationMessage) {
         body = '[Localização]';
-      } else {
-        body = JSON.stringify(messageContent).substring(0, 200);
+      } else if (Object.keys(messageContent).length > 0) {
+        // Try to extract any text content
+        const textKeys = ['text', 'body', 'caption', 'content'];
+        for (const key of textKeys) {
+          if (messageContent[key]) {
+            body = messageContent[key];
+            break;
+          }
+        }
+        if (!body) {
+          body = JSON.stringify(messageContent).substring(0, 200);
+        }
       }
 
-      console.log(`Incoming message from ${phone}: ${body}`);
+      console.log(`Incoming message from ${phone}: "${body}"`);
 
       // Find lead by phone number
       const lead = await findLeadByPhone(supabase, phone);
