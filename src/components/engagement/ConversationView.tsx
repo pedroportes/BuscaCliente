@@ -195,28 +195,28 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
 
   if (!lead) {
     return (
-      <Card className="h-full bg-card border-0 shadow-md flex items-center justify-center">
-        <div className="text-center text-muted-foreground p-8">
-          <MessageCircle className="w-16 h-16 mx-auto mb-4 opacity-20" />
-          <h3 className="text-lg font-medium mb-2">Selecione um lead</h3>
-          <p className="text-sm">Escolha um lead para ver o histórico de conversas</p>
+      <Card className="h-full bg-card border-0 shadow-sm flex items-center justify-center">
+        <div className="text-center text-muted-foreground p-6">
+          <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-20" />
+          <h3 className="text-base font-medium mb-1">Selecione um lead</h3>
+          <p className="text-xs">Escolha um lead para ver a conversa</p>
         </div>
       </Card>
     );
   }
 
   return (
-    <Card className="h-full bg-card border-0 shadow-md flex flex-col overflow-hidden">
-      {/* Lead Header */}
-      <div className="p-4 border-b border-border bg-muted/30">
-        <div className="flex items-start justify-between">
+    <Card className="h-full bg-card border-0 shadow-sm flex flex-col overflow-hidden">
+      {/* Compact Lead Header */}
+      <div className="px-4 py-3 border-b border-border bg-muted/20">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-              <Building2 className="w-6 h-6 text-primary" />
+            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+              <Building2 className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">{lead.business_name}</h3>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <h3 className="font-semibold text-sm">{lead.business_name}</h3>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 {lead.city && (
                   <span className="flex items-center gap-1">
                     <MapPin className="w-3 h-3" />
@@ -233,20 +233,20 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <div className="flex items-center gap-1">
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => refetch()}>
               <RefreshCw className="w-4 h-4" />
             </Button>
             {lead.phone && (
               <a href={`tel:${lead.phone}`}>
-                <Button variant="outline" size="sm">
+                <Button variant="ghost" size="icon" className="h-8 w-8">
                   <Phone className="w-4 h-4" />
                 </Button>
               </a>
             )}
             {lead.email && (
               <a href={`mailto:${lead.email}`}>
-                <Button variant="outline" size="sm">
+                <Button variant="ghost" size="icon" className="h-8 w-8">
                   <Mail className="w-4 h-4" />
                 </Button>
               </a>
@@ -254,22 +254,16 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
           </div>
         </div>
         
-        {/* Contact Info Badges */}
-        <div className="flex flex-wrap gap-2 mt-3">
+        {/* Compact Contact Info */}
+        <div className="flex flex-wrap gap-1.5 mt-2">
           {lead.phone && (
-            <Badge variant="secondary" className="text-xs">
+            <Badge variant="outline" className="text-xs py-0.5">
               <Phone className="w-3 h-3 mr-1" />
               {formatPhoneForDisplay(lead.phone)}
             </Badge>
           )}
-          {lead.email && (
-            <Badge variant="secondary" className="text-xs">
-              <Mail className="w-3 h-3 mr-1" />
-              {lead.email}
-            </Badge>
-          )}
           {lead.has_whatsapp && (
-            <Badge variant="secondary" className="text-xs bg-success/10 text-success">
+            <Badge variant="outline" className="text-xs py-0.5 border-success/30 text-success">
               <MessageCircle className="w-3 h-3 mr-1" />
               WhatsApp
             </Badge>
@@ -278,36 +272,36 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
       </div>
 
       {/* Messages Area */}
-      <ScrollArea className="flex-1 p-4">
+      <ScrollArea className="flex-1 px-3 py-2">
         {isLoading ? (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className={cn("flex", i % 2 === 0 ? "justify-end" : "justify-start")}>
-                <Skeleton className="h-16 w-3/4 rounded-lg" />
+                <Skeleton className="h-12 w-2/3 rounded-xl" />
               </div>
             ))}
           </div>
         ) : Object.keys(groupedMessages).length === 0 ? (
-          <div className="h-full flex items-center justify-center text-muted-foreground">
+          <div className="h-full flex items-center justify-center text-muted-foreground py-8">
             <div className="text-center">
-              <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-20" />
-              <p>Nenhuma mensagem ainda</p>
-              <p className="text-sm">Envie a primeira mensagem para este lead</p>
+              <MessageCircle className="w-10 h-10 mx-auto mb-2 opacity-20" />
+              <p className="text-sm">Nenhuma mensagem ainda</p>
+              <p className="text-xs">Envie a primeira mensagem</p>
             </div>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {Object.entries(groupedMessages).map(([date, messages]) => (
               <div key={date}>
                 {/* Date Separator */}
-                <div className="flex items-center justify-center mb-4">
-                  <div className="bg-muted px-3 py-1 rounded-full text-xs text-muted-foreground">
+                <div className="flex items-center justify-center mb-3">
+                  <div className="bg-muted px-2 py-0.5 rounded-full text-xs text-muted-foreground">
                     {date}
                   </div>
                 </div>
                 
                 {/* Messages for this date */}
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {messages.map((message) => {
                     const isOutbound = message.direction === 'outbound';
                     return (
@@ -317,20 +311,20 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
                       >
                         <div 
                           className={cn(
-                            "max-w-[80%] rounded-2xl px-4 py-2 shadow-sm",
+                            "max-w-[75%] rounded-xl px-3 py-2 shadow-sm",
                             isOutbound 
-                              ? "bg-primary text-primary-foreground rounded-br-md" 
-                              : "bg-muted rounded-bl-md"
+                              ? "bg-primary text-primary-foreground rounded-br-sm" 
+                              : "bg-muted rounded-bl-sm"
                           )}
                         >
                           {/* Channel indicator for outbound */}
                           {isOutbound && (
-                            <div className="flex items-center gap-1 mb-1 opacity-70">
+                            <div className="flex items-center gap-1 mb-0.5 opacity-70">
                               <ChannelIcon 
                                 channel={message.channel as any} 
                                 className="w-3 h-3" 
                               />
-                              <span className="text-xs capitalize">{message.channel}</span>
+                              <span className="text-[10px] capitalize">{message.channel}</span>
                             </div>
                           )}
                           
@@ -339,10 +333,10 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
                           </p>
                           
                           <div className={cn(
-                            "flex items-center gap-2 mt-1",
+                            "flex items-center gap-1.5 mt-0.5",
                             isOutbound ? "justify-end" : "justify-start"
                           )}>
-                            <span className="text-xs opacity-70">
+                            <span className="text-[10px] opacity-70">
                               {formatMessageTime(message.sent_at || message.created_at)}
                             </span>
                             {isOutbound && (
@@ -353,7 +347,7 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
                           </div>
                           
                           {message.status === 'failed' && message.error_message && (
-                            <p className="text-xs text-destructive mt-1 opacity-80">
+                            <p className="text-[10px] text-destructive mt-0.5 opacity-80">
                               {message.error_message}
                             </p>
                           )}
@@ -369,28 +363,29 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
         )}
       </ScrollArea>
 
-      {/* Message Input */}
-      <div className="p-4 border-t border-border bg-muted/30">
+      {/* Compact Message Input */}
+      <div className="p-3 border-t border-border bg-muted/20">
         {/* Connection Status */}
         {isEvolutionConfigured && !evolutionStatus.connected && (
-          <div className="mb-3 p-2 rounded-lg bg-warning/10 border border-warning/20 text-sm text-warning">
+          <div className="mb-2 p-2 rounded-lg bg-warning/10 border border-warning/20 text-xs text-warning">
             WhatsApp desconectado - mensagens serão salvas mas não enviadas
           </div>
         )}
         
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-end">
           <Textarea
             placeholder="Digite sua mensagem..."
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             onKeyDown={handleKeyDown}
-            className="min-h-[44px] max-h-32 resize-none"
+            className="min-h-[40px] max-h-24 resize-none text-sm"
             rows={1}
           />
           <Button 
             onClick={handleSendMessage}
             disabled={!newMessage.trim() || isSending}
-            className="px-4"
+            size="icon"
+            className="h-10 w-10 shrink-0"
           >
             {isSending ? (
               <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
@@ -400,8 +395,8 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
           </Button>
         </div>
         
-        <p className="text-xs text-muted-foreground mt-2">
-          Pressione Enter para enviar, Shift+Enter para nova linha
+        <p className="text-[10px] text-muted-foreground mt-1">
+          Enter para enviar • Shift+Enter para nova linha
         </p>
       </div>
     </Card>
