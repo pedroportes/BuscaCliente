@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,12 +22,13 @@ import {
   Send,
   Plus,
   User,
-  Calendar
+  Calendar,
+  Loader2
 } from 'lucide-react';
-import { mockLeads, mockTags } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 
-const stageConfig = {
+const stageConfig: Record<string, { label: string; className: string }> = {
   new: { label: 'Novo', className: 'bg-muted text-muted-foreground' },
   contacted: { label: 'Contactado', className: 'bg-primary/10 text-primary' },
   qualified: { label: 'Qualificado', className: 'bg-success/10 text-success' },
@@ -37,11 +39,26 @@ const stageConfig = {
 
 export default function LeadDetail() {
   const { id } = useParams();
-  const lead = mockLeads.find(l => l.id === id) || mockLeads[0];
-  const [stage, setStage] = useState(lead.stage);
   const [generatedCopy, setGeneratedCopy] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [newNote, setNewNote] = useState('');
+
+  const { data: lead, isLoading } = useQuery({
+    queryKey: ['lead', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('leads')
+        .select('*')
+        .eq('id', id)
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!id,
+  });
+
+  const [stage, setStage] = useState<string>(lead?.stage || 'new');
 
   const getScoreColor = (score: number) => {
     if (score >= 70) return 'text-success bg-success/10 border-success/20';
@@ -50,12 +67,13 @@ export default function LeadDetail() {
   };
 
   const handleGenerateCopy = () => {
+    if (!lead) return;
     setIsGenerating(true);
-    // Mock AI generation
+    // Mock AI generation - TODO: Conectar com Google Gemini via Edge Function
     setTimeout(() => {
-      setGeneratedCopy(`Olá! Somos a GestãoFlow, uma solução completa para gestão de empresas de desentupimento.
+      setGeneratedCopy(`Olá! Somos a GestãoFlow, uma solução completa para gestão de empresas.
 
-Notamos que a ${lead.business_name} tem excelente reputação em ${lead.city}, com ${lead.total_reviews} avaliações positivas! 
+Notamos que a ${lead.business_name} tem excelente reputação em ${lead.city || 'sua região'}, com ${lead.total_reviews || 0} avaliações positivas! 
 
 Queremos ajudar vocês a crescer ainda mais com:
 ✅ Agendamento automatizado
@@ -67,10 +85,36 @@ Que tal uma demonstração gratuita de 15 minutos?`);
     }, 2000);
   };
 
+  if (isLoading) {
+    return (
+      <AppLayout title="Carregando..." subtitle="">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (!lead) {
+    return (
+      <AppLayout title="Lead não encontrado" subtitle="">
+        <div className="text-center py-20">
+          <p className="text-muted-foreground mb-4">Este lead não foi encontrado.</p>
+          <Link to="/leads">
+            <Button>Voltar para Leads</Button>
+          </Link>
+        </div>
+      </AppLayout>
+    );
+  }
+
+  const currentStage = stage || lead.stage || 'new';
+  const stageInfo = stageConfig[currentStage] || stageConfig.new;
+
   return (
     <AppLayout 
       title={lead.business_name} 
-      subtitle={`${lead.city}, ${lead.state}`}
+      subtitle={`${lead.city || ''}, ${lead.state || ''}`}
     >
       {/* Back Button */}
       <Link to="/leads" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors">
@@ -87,21 +131,21 @@ Que tal uma demonstração gratuita de 15 minutos?`);
               <div className="flex items-center gap-4">
                 <div className={cn(
                   "w-16 h-16 rounded-2xl flex items-center justify-center font-bold text-2xl border-2",
-                  getScoreColor(lead.lead_score)
+                  getScoreColor(lead.lead_score || 0)
                 )}>
-                  {lead.lead_score}
+                  {lead.lead_score || 0}
                 </div>
                 <div>
                   <h2 className="text-xl font-bold text-card-foreground">{lead.business_name}</h2>
                   <div className="flex items-center gap-2 mt-1">
                     <Star className="w-4 h-4 fill-warning text-warning" />
-                    <span className="font-medium">{lead.rating}</span>
-                    <span className="text-muted-foreground">({lead.total_reviews} avaliações)</span>
+                    <span className="font-medium">{lead.rating || '-'}</span>
+                    <span className="text-muted-foreground">({lead.total_reviews || 0} avaliações)</span>
                   </div>
                 </div>
               </div>
 
-              <Select value={stage} onValueChange={(v: typeof stage) => setStage(v)}>
+              <Select value={currentStage} onValueChange={setStage}>
                 <SelectTrigger className="w-40">
                   <SelectValue />
                 </SelectTrigger>
@@ -115,23 +159,6 @@ Que tal uma demonstração gratuita de 15 minutos?`);
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-
-            {/* Tags */}
-            <div className="flex items-center gap-2 mb-6">
-              {lead.tags?.map(tag => (
-                <Badge 
-                  key={tag.id} 
-                  className="rounded-full text-white"
-                  style={{ backgroundColor: tag.color }}
-                >
-                  {tag.name}
-                </Badge>
-              ))}
-              <Button variant="ghost" size="sm" className="h-6 gap-1 text-muted-foreground">
-                <Plus className="w-3 h-3" />
-                Tag
-              </Button>
             </div>
 
             {/* Contact Info Grid */}
@@ -158,7 +185,7 @@ Que tal uma demonstração gratuita de 15 minutos?`);
                 <MapPin className="w-5 h-5 text-destructive" />
                 <div>
                   <p className="text-xs text-muted-foreground">Localização</p>
-                  <p className="font-medium text-card-foreground">{lead.city}, {lead.state}</p>
+                  <p className="font-medium text-card-foreground">{lead.city || '-'}, {lead.state || '-'}</p>
                 </div>
               </div>
               {lead.website_url && (
@@ -200,7 +227,7 @@ Que tal uma demonstração gratuita de 15 minutos?`);
                       <Clock className="w-5 h-5 text-muted-foreground" />
                       <div>
                         <p className="text-sm text-muted-foreground">Horário de Funcionamento</p>
-                        <p className="font-medium">Segunda a Sexta: 08:00 - 18:00</p>
+                        <p className="font-medium">Não disponível</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-xl">
@@ -271,35 +298,23 @@ Que tal uma demonstração gratuita de 15 minutos?`);
                   </div>
                   
                   <div className="space-y-3">
-                    <div className="p-4 bg-muted/30 rounded-xl">
-                      <div className="flex items-center gap-2 mb-2">
-                        <User className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">João Demo</span>
-                        <span className="text-xs text-muted-foreground">• há 2 dias</span>
-                      </div>
-                      <p className="text-sm text-card-foreground">
-                        Empresa com bom potencial. Responder no horário comercial.
-                      </p>
+                    <div className="text-center py-8 text-muted-foreground text-sm">
+                      Nenhuma nota ainda. Adicione a primeira!
                     </div>
                   </div>
                 </TabsContent>
 
                 <TabsContent value="activity" className="mt-0">
                   <div className="space-y-4">
-                    {[
-                      { action: 'Lead criado', date: lead.created_at, icon: Plus },
-                      { action: 'Tag "Quente" adicionada', date: new Date().toISOString(), icon: Star },
-                    ].map((item, i) => (
-                      <div key={i} className="flex items-center gap-3 p-3 border-l-2 border-primary/30">
-                        <item.icon className="w-4 h-4 text-primary" />
-                        <div>
-                          <p className="text-sm font-medium">{item.action}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(item.date).toLocaleDateString('pt-BR')}
-                          </p>
-                        </div>
+                    <div className="flex items-center gap-3 p-3 border-l-2 border-primary/30">
+                      <Plus className="w-4 h-4 text-primary" />
+                      <div>
+                        <p className="text-sm font-medium">Lead criado</p>
+                        <p className="text-xs text-muted-foreground">
+                          {lead.created_at ? new Date(lead.created_at).toLocaleDateString('pt-BR') : '-'}
+                        </p>
                       </div>
-                    ))}
+                    </div>
                   </div>
                 </TabsContent>
               </div>
@@ -335,8 +350,8 @@ Que tal uma demonstração gratuita de 15 minutos?`);
               {[
                 { label: 'Website', points: lead.website_url ? 25 : 0, max: 25 },
                 { label: 'WhatsApp', points: lead.has_whatsapp ? 15 : 0, max: 15 },
-                { label: 'Rating', points: lead.rating >= 4.5 ? 30 : lead.rating >= 4 ? 20 : 10, max: 30 },
-                { label: 'Avaliações', points: lead.total_reviews >= 50 ? 20 : lead.total_reviews >= 20 ? 10 : 0, max: 20 },
+                { label: 'Rating', points: (lead.rating || 0) >= 4.5 ? 30 : (lead.rating || 0) >= 4 ? 20 : 10, max: 30 },
+                { label: 'Avaliações', points: (lead.total_reviews || 0) >= 50 ? 20 : (lead.total_reviews || 0) >= 20 ? 10 : 0, max: 20 },
                 { label: 'Email', points: lead.email ? 10 : 0, max: 10 },
               ].map(item => (
                 <div key={item.label} className="flex items-center justify-between">
@@ -361,7 +376,7 @@ Que tal uma demonstração gratuita de 15 minutos?`);
                 <div>
                   <p className="text-xs text-muted-foreground">Criado em</p>
                   <p className="text-sm font-medium">
-                    {new Date(lead.created_at).toLocaleDateString('pt-BR')}
+                    {lead.created_at ? new Date(lead.created_at).toLocaleDateString('pt-BR') : '-'}
                   </p>
                 </div>
               </div>
