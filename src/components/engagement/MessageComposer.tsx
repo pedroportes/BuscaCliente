@@ -1,13 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
 import { 
   MessageCircle, 
   Mail, 
@@ -19,14 +17,31 @@ import {
   Calendar,
   Wifi,
   WifiOff,
-  Settings2
+  Settings2,
+  Search,
+  Check,
+  ChevronsUpDown
 } from 'lucide-react';
-import { mockLeads } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
 import { useEvolutionApi } from '@/hooks/useEvolutionApi';
 import { TemplateSelector } from './TemplateSelector';
 import { MessageTemplate } from '@/types';
 import { useNavigate } from 'react-router-dom';
+import { useLeads, Lead } from '@/hooks/useLeads';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import { cn } from '@/lib/utils';
 
 interface MessageComposerProps {
   selectedLeadId?: string;
@@ -37,6 +52,7 @@ export function MessageComposer({ selectedLeadId, onMessageSent }: MessageCompos
   const { toast } = useToast();
   const navigate = useNavigate();
   const { status: evolutionStatus, isConfigured: isEvolutionConfigured, sendWhatsAppMessage } = useEvolutionApi();
+  const { data: leads = [], isLoading: isLoadingLeads } = useLeads();
   
   const [activeChannel, setActiveChannel] = useState<string>('whatsapp');
   const [leadId, setLeadId] = useState(selectedLeadId || '');
@@ -46,8 +62,12 @@ export function MessageComposer({ selectedLeadId, onMessageSent }: MessageCompos
   const [scheduleDate, setScheduleDate] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [open, setOpen] = useState(false);
 
-  const selectedLead = mockLeads.find(l => l.id === leadId);
+  const selectedLead = useMemo(() => 
+    leads.find(l => l.id === leadId), 
+    [leads, leadId]
+  );
 
   // Replace template variables with lead data
   const applyTemplateVariables = (text: string) => {
@@ -55,10 +75,10 @@ export function MessageComposer({ selectedLeadId, onMessageSent }: MessageCompos
     
     return text
       .replace(/\{business_name\}/g, selectedLead.business_name)
-      .replace(/\{city\}/g, selectedLead.city)
-      .replace(/\{state\}/g, selectedLead.state)
-      .replace(/\{rating\}/g, String(selectedLead.rating))
-      .replace(/\{total_reviews\}/g, String(selectedLead.total_reviews));
+      .replace(/\{city\}/g, selectedLead.city || '')
+      .replace(/\{state\}/g, selectedLead.state || '')
+      .replace(/\{rating\}/g, String(selectedLead.rating || 0))
+      .replace(/\{total_reviews\}/g, String(selectedLead.total_reviews || 0));
   };
 
   const handleSelectTemplate = (template: MessageTemplate) => {
@@ -91,8 +111,8 @@ export function MessageComposer({ selectedLeadId, onMessageSent }: MessageCompos
     setIsGenerating(true);
     setTimeout(() => {
       const templates = {
-        whatsapp: `Olá! Somos a GestãoFlow 👋\n\nNotamos que a ${selectedLead.business_name} tem excelentes avaliações (${selectedLead.rating}⭐)!\n\nTemos uma solução completa para gestão de empresas como a sua:\n✅ Agendamento automatizado\n✅ Controle financeiro\n✅ CRM para clientes\n\nPodemos conversar? 😊`,
-        email: `Olá,\n\nNotamos que a ${selectedLead.business_name} é referência em ${selectedLead.city}, com ${selectedLead.total_reviews} avaliações positivas!\n\nGostaríamos de apresentar nossa plataforma de gestão, desenvolvida especialmente para empresas do seu segmento.\n\nPodemos agendar uma demonstração gratuita de 15 minutos?\n\nAtenciosamente,\nEquipe GestãoFlow`,
+        whatsapp: `Olá! Somos a GestãoFlow 👋\n\nNotamos que a ${selectedLead.business_name} tem excelentes avaliações (${selectedLead.rating || 0}⭐)!\n\nTemos uma solução completa para gestão de empresas como a sua:\n✅ Agendamento automatizado\n✅ Controle financeiro\n✅ CRM para clientes\n\nPodemos conversar? 😊`,
+        email: `Olá,\n\nNotamos que a ${selectedLead.business_name} é referência em ${selectedLead.city || 'sua região'}, com ${selectedLead.total_reviews || 0} avaliações positivas!\n\nGostaríamos de apresentar nossa plataforma de gestão, desenvolvida especialmente para empresas do seu segmento.\n\nPodemos agendar uma demonstração gratuita de 15 minutos?\n\nAtenciosamente,\nEquipe GestãoFlow`,
         instagram: `Parabéns pelo excelente trabalho! 👏🔧\n\nVocês utilizam algum sistema de gestão para organizar os atendimentos? Temos uma solução que pode ajudar muito! 💪`,
         facebook: `Olá! Parabéns pela página! 🌟\n\nNotamos o ótimo trabalho da ${selectedLead.business_name}. Gostaríamos de apresentar nossa plataforma de gestão. Podemos conversar?`,
       };
@@ -200,24 +220,65 @@ export function MessageComposer({ selectedLeadId, onMessageSent }: MessageCompos
         </div>
       )}
 
-      {/* Lead Selection */}
+      {/* Lead Selection with Search */}
       <div className="mb-4">
         <Label className="text-sm text-muted-foreground mb-2 block">Selecionar Lead</Label>
-        <Select value={leadId} onValueChange={setLeadId}>
-          <SelectTrigger>
-            <SelectValue placeholder="Escolha um lead..." />
-          </SelectTrigger>
-          <SelectContent>
-            {mockLeads.slice(0, 20).map(lead => (
-              <SelectItem key={lead.id} value={lead.id}>
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{lead.business_name}</span>
-                  <span className="text-muted-foreground text-xs">• {lead.city}</span>
-                </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={open}
+              className="w-full justify-between"
+              disabled={isLoadingLeads}
+            >
+              {isLoadingLeads ? (
+                'Carregando leads...'
+              ) : selectedLead ? (
+                <span className="flex items-center gap-2 truncate">
+                  <span className="font-medium">{selectedLead.business_name}</span>
+                  <span className="text-muted-foreground text-xs">• {selectedLead.city || 'Sem cidade'}</span>
+                </span>
+              ) : (
+                'Escolha um lead...'
+              )}
+              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+            <Command>
+              <CommandInput placeholder="Buscar lead por nome ou cidade..." />
+              <CommandList>
+                <CommandEmpty>Nenhum lead encontrado.</CommandEmpty>
+                <CommandGroup className="max-h-64 overflow-auto">
+                  {leads.map((lead) => (
+                    <CommandItem
+                      key={lead.id}
+                      value={`${lead.business_name} ${lead.city || ''}`}
+                      onSelect={() => {
+                        setLeadId(lead.id);
+                        setOpen(false);
+                      }}
+                    >
+                      <Check
+                        className={cn(
+                          "mr-2 h-4 w-4",
+                          leadId === lead.id ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                      <div className="flex flex-col">
+                        <span className="font-medium">{lead.business_name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {lead.city || 'Sem cidade'} {lead.state && `• ${lead.state}`}
+                        </span>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Channel Tabs */}

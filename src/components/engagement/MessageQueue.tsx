@@ -2,11 +2,9 @@ import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Search, 
-  Filter,
   RefreshCw,
   MoreVertical,
   ExternalLink,
@@ -15,8 +13,7 @@ import {
 } from 'lucide-react';
 import { ChannelIcon } from './ChannelIcon';
 import { MessageStatusBadge } from './MessageStatusBadge';
-import { mockMessages } from '@/data/mockMessages';
-import { Message } from '@/types';
+import { useMessages } from '@/hooks/useMessages';
 import { cn } from '@/lib/utils';
 import {
   DropdownMenu,
@@ -24,9 +21,12 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useQueryClient } from '@tanstack/react-query';
 
 export function MessageQueue() {
-  const [messages, setMessages] = useState<Message[]>(mockMessages);
+  const queryClient = useQueryClient();
+  const { data: messages = [], isLoading, refetch } = useMessages();
   const [search, setSearch] = useState('');
   const [channelFilter, setChannelFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -39,7 +39,8 @@ export function MessageQueue() {
     return matchesSearch && matchesChannel && matchesStatus;
   });
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
     const now = new Date();
     const diff = now.getTime() - date.getTime();
@@ -51,7 +52,8 @@ export function MessageQueue() {
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   };
 
-  const formatScheduleDate = (dateString: string) => {
+  const formatScheduleDate = (dateString: string | null) => {
+    if (!dateString) return '';
     const date = new Date(dateString);
     return date.toLocaleDateString('pt-BR', { 
       day: '2-digit', 
@@ -61,13 +63,49 @@ export function MessageQueue() {
     });
   };
 
+  const handleRefresh = () => {
+    refetch();
+  };
+
+  if (isLoading) {
+    return (
+      <Card className="bg-card border-0 shadow-md overflow-hidden">
+        <div className="p-4 border-b border-border">
+          <div className="flex items-center justify-between mb-4">
+            <Skeleton className="h-6 w-40" />
+            <Skeleton className="h-9 w-24" />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Skeleton className="h-10 flex-1" />
+            <Skeleton className="h-10 w-40" />
+            <Skeleton className="h-10 w-40" />
+          </div>
+        </div>
+        <div className="divide-y divide-border">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="p-4">
+              <div className="flex items-start gap-4">
+                <Skeleton className="w-16 h-6" />
+                <div className="flex-1">
+                  <Skeleton className="h-5 w-48 mb-2" />
+                  <Skeleton className="h-4 w-full" />
+                </div>
+                <Skeleton className="w-16 h-4" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    );
+  }
+
   return (
     <Card className="bg-card border-0 shadow-md overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Fila de Mensagens</h3>
-          <Button variant="outline" size="sm" className="gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={handleRefresh}>
             <RefreshCw className="w-4 h-4" />
             Atualizar
           </Button>
@@ -131,7 +169,7 @@ export function MessageQueue() {
               <div className="flex items-start gap-4">
                 {/* Channel Icon */}
                 <div className="flex-shrink-0">
-                  <ChannelIcon channel={msg.channel} showLabel />
+                  <ChannelIcon channel={msg.channel as 'whatsapp' | 'email' | 'instagram' | 'facebook'} showLabel />
                 </div>
 
                 {/* Content */}
@@ -140,7 +178,7 @@ export function MessageQueue() {
                     <span className="font-medium text-card-foreground truncate">
                       {msg.lead?.business_name || 'Lead removido'}
                     </span>
-                    <MessageStatusBadge status={msg.status} />
+                    <MessageStatusBadge status={msg.status as any} />
                   </div>
                   
                   {msg.subject && (
