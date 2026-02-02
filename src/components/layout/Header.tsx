@@ -1,9 +1,10 @@
-import { Bell, Search, Coins, LogOut } from 'lucide-react';
+import { Bell, Search, Coins, LogOut, User } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useCompanyCredits } from '@/hooks/useCompany';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,17 +21,15 @@ interface HeaderProps {
 
 export function Header({ title, subtitle }: HeaderProps) {
   const { data: credits, isLoading: creditsLoading } = useCompanyCredits();
+  const { user, signOut } = useAuth();
   const navigate = useNavigate();
 
-  // Por enquanto, usuário fictício até implementar auth
-  const user = {
-    name: 'Usuário',
-    email: 'usuario@vortex.ai',
-    role: 'Admin',
-    initials: 'VA',
-  };
+  const userEmail = user?.email || '';
+  const userName = user?.user_metadata?.full_name || userEmail.split('@')[0] || 'Usuário';
+  const userInitials = userName.slice(0, 2).toUpperCase();
 
-  const handleLogin = () => {
+  const handleLogout = async () => {
+    await signOut();
     navigate('/login');
   };
 
@@ -76,24 +75,29 @@ export function Header({ title, subtitle }: HeaderProps) {
               <Button variant="ghost" className="flex items-center gap-3 p-1 pr-3 h-auto">
                 <Avatar className="w-9 h-9 border-2 border-primary/20">
                   <AvatarFallback className="bg-primary/10 text-primary font-semibold">
-                    {user.initials}
+                    {userInitials}
                   </AvatarFallback>
                 </Avatar>
                 <div className="hidden lg:block text-left">
-                  <p className="text-sm font-medium text-foreground">{user.name}</p>
-                  <p className="text-xs text-muted-foreground">{user.role}</p>
+                  <p className="text-sm font-medium text-foreground">{userName}</p>
+                  <p className="text-xs text-muted-foreground">{userEmail}</p>
                 </div>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <div className="px-2 py-1.5">
-                <p className="text-sm font-medium">{user.name}</p>
-                <p className="text-xs text-muted-foreground">{user.email}</p>
+                <p className="text-sm font-medium">{userName}</p>
+                <p className="text-xs text-muted-foreground">{userEmail}</p>
               </div>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogin}>
+              <DropdownMenuItem onClick={() => navigate('/settings')}>
+                <User className="w-4 h-4 mr-2" />
+                Configurações
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleLogout} className="text-destructive">
                 <LogOut className="w-4 h-4 mr-2" />
-                Fazer Login
+                Sair
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

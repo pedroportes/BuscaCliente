@@ -1,43 +1,64 @@
 import { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Droplets, Mail, Lock, ArrowRight } from 'lucide-react';
+import { Droplets, Mail, Lock, User, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 
-export default function Login() {
+export default function Register() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { signIn } = useAuth();
+  const { signUp } = useAuth();
   const { toast } = useToast();
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const from = location.state?.from?.pathname || '/dashboard';
-
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (password !== confirmPassword) {
+      toast({
+        title: "Erro",
+        description: "As senhas não coincidem.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({
+        title: "Erro",
+        description: "A senha deve ter no mínimo 6 caracteres.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
     
-    const { error } = await signIn(email, password);
+    const { error } = await signUp(email, password, fullName);
     
     if (error) {
       toast({
-        title: "Erro ao fazer login",
-        description: error.message === 'Invalid login credentials' 
-          ? "Email ou senha incorretos." 
-          : error.message,
+        title: "Erro ao criar conta",
+        description: error.message,
         variant: "destructive",
       });
       setIsLoading(false);
       return;
     }
 
-    navigate(from, { replace: true });
+    toast({
+      title: "Conta criada!",
+      description: "Verifique seu email para confirmar sua conta.",
+    });
+    
+    navigate('/login');
   };
 
   return (
@@ -55,12 +76,28 @@ export default function Login() {
             <Droplets className="w-8 h-8 text-primary-foreground" />
           </div>
           <h1 className="text-2xl font-bold text-foreground">FlowDrain Scout</h1>
-          <p className="text-muted-foreground mt-1">Prospecção inteligente de leads</p>
+          <p className="text-muted-foreground mt-1">Crie sua conta</p>
         </div>
 
-        {/* Login Card */}
+        {/* Register Card */}
         <Card className="p-8 bg-card border-0 shadow-xl">
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={handleRegister} className="space-y-5">
+            <div className="space-y-2">
+              <Label htmlFor="fullName">Nome completo</Label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="fullName"
+                  type="text"
+                  placeholder="Seu nome"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="pl-10"
+                  required
+                />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <div className="relative">
@@ -93,14 +130,20 @@ export default function Login() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input type="checkbox" className="rounded border-border" />
-                <span className="text-sm text-muted-foreground">Lembrar-me</span>
-              </label>
-              <Link to="/forgot-password" className="text-sm text-primary hover:underline">
-                Esqueceu a senha?
-              </Link>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirmar senha</Label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="confirmPassword"
+                  type="password"
+                  placeholder="••••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="pl-10"
+                  required
+                />
+              </div>
             </div>
 
             <Button 
@@ -111,11 +154,11 @@ export default function Login() {
               {isLoading ? (
                 <span className="flex items-center gap-2">
                   <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                  Entrando...
+                  Criando conta...
                 </span>
               ) : (
                 <span className="flex items-center gap-2">
-                  Entrar
+                  Criar conta
                   <ArrowRight className="w-4 h-4" />
                 </span>
               )}
@@ -124,9 +167,9 @@ export default function Login() {
 
           <div className="mt-6 text-center">
             <p className="text-sm text-muted-foreground">
-              Não tem uma conta?{' '}
-              <Link to="/register" className="text-primary font-medium hover:underline">
-                Criar conta
+              Já tem uma conta?{' '}
+              <Link to="/login" className="text-primary font-medium hover:underline">
+                Fazer login
               </Link>
             </p>
           </div>
