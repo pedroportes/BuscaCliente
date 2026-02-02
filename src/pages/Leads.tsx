@@ -20,16 +20,18 @@ import {
   ChevronRight,
   MoreHorizontal,
   ArrowUpDown,
-  Instagram
+  Instagram,
+  Loader2
 } from 'lucide-react';
-import { mockLeads, mockCampaigns, mockTags } from '@/data/mockData';
-
 import { cn } from '@/lib/utils';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { LeadTemperatureBadge } from '@/components/leads/LeadTemperatureBadge';
 import { DataSourceBadge } from '@/components/leads/DataSourceBadge';
+import { useLeads } from '@/hooks/useLeads';
+import { useCampaigns } from '@/hooks/useCampaigns';
+import { useTags } from '@/hooks/useTags';
 
-const stageConfig = {
+const stageConfig: Record<string, { label: string; className: string }> = {
   new: { label: 'Novo', className: 'bg-muted text-muted-foreground' },
   contacted: { label: 'Contactado', className: 'bg-primary/10 text-primary' },
   qualified: { label: 'Qualificado', className: 'bg-success/10 text-success' },
@@ -39,25 +41,31 @@ const stageConfig = {
 };
 
 export default function Leads() {
+  const [searchParams] = useSearchParams();
+  const campaignIdFromUrl = searchParams.get('campaign');
+  
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCampaign, setSelectedCampaign] = useState<string>('all');
+  const [selectedCampaign, setSelectedCampaign] = useState<string>(campaignIdFromUrl || 'all');
   const [selectedStage, setSelectedStage] = useState<string>('all');
   const [scoreRange, setScoreRange] = useState([0, 100]);
   const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const leadsPerPage = 10;
 
+  const { data: leads, isLoading } = useLeads(selectedCampaign);
+  const { data: campaigns } = useCampaigns();
+  const { data: tags } = useTags();
+
   const filteredLeads = useMemo(() => {
-    return mockLeads.filter(lead => {
+    return (leads || []).filter(lead => {
       const matchesSearch = lead.business_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        lead.city.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCampaign = selectedCampaign === 'all' || lead.campaign_id === selectedCampaign;
+        (lead.city || '').toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStage = selectedStage === 'all' || lead.stage === selectedStage;
-      const matchesScore = lead.lead_score >= scoreRange[0] && lead.lead_score <= scoreRange[1];
+      const matchesScore = (lead.lead_score || 0) >= scoreRange[0] && (lead.lead_score || 0) <= scoreRange[1];
       
-      return matchesSearch && matchesCampaign && matchesStage && matchesScore;
+      return matchesSearch && matchesStage && matchesScore;
     });
-  }, [searchQuery, selectedCampaign, selectedStage, scoreRange]);
+  }, [leads, searchQuery, selectedStage, scoreRange]);
 
   const paginatedLeads = useMemo(() => {
     const start = (currentPage - 1) * leadsPerPage;
@@ -88,6 +96,14 @@ export default function Leads() {
     return 'text-muted-foreground bg-muted';
   };
 
+  const getTemperature = (score: number | null, stage: string | null): 'cold' | 'warm' | 'hot' | 'converted' => {
+    if (stage === 'won') return 'converted';
+    const s = score || 0;
+    if (s >= 75) return 'hot';
+    if (s >= 50) return 'warm';
+    return 'cold';
+  };
+
   return (
     <AppLayout 
       title="Leads" 
@@ -111,7 +127,7 @@ export default function Leads() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as campanhas</SelectItem>
-                  {mockCampaigns.map(campaign => (
+                  {(campaigns || []).map(campaign => (
                     <SelectItem key={campaign.id} value={campaign.id}>
                       {campaign.name}
                     </SelectItem>
@@ -155,7 +171,7 @@ export default function Leads() {
             <div>
               <label className="text-sm font-medium text-card-foreground mb-3 block">Tags</label>
               <div className="space-y-2">
-                {mockTags.map(tag => (
+                {(tags || []).map(tag => (
                   <label key={tag.id} className="flex items-center gap-2 cursor-pointer">
                     <Checkbox id={tag.id} />
                     <span 
@@ -237,95 +253,97 @@ export default function Leads() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {paginatedLeads.map((lead, index) => (
-                    <tr 
-                      key={lead.id} 
-                      className="hover:bg-muted/30 transition-colors animate-fade-in cursor-pointer"
-                      style={{ animationDelay: `${index * 30}ms` }}
-                    >
-                      <td className="px-4 py-3">
-                        <Checkbox 
-                          checked={selectedLeads.includes(lead.id)}
-                          onCheckedChange={() => toggleLeadSelection(lead.id)}
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <span className={cn(
-                          "inline-flex items-center justify-center w-10 h-10 rounded-xl font-bold text-sm",
-                          getScoreColor(lead.lead_score)
-                        )}>
-                          {lead.lead_score}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Link to={`/leads/${lead.id}`} className="hover:text-primary transition-colors">
-                          <p className="font-medium text-card-foreground">{lead.business_name}</p>
-                          <div className="flex gap-1 mt-1 flex-wrap">
-                            {lead.tags?.slice(0, 2).map(tag => (
-                              <span 
-                                key={tag.id}
-                                className="text-xs px-2 py-0.5 rounded-full text-white"
-                                style={{ backgroundColor: tag.color }}
-                              >
-                                {tag.name}
-                              </span>
-                            ))}
-                            {lead.email_source && (
-                              <DataSourceBadge source={lead.email_source} />
-                            )}
-                          </div>
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3">
-                        <LeadTemperatureBadge temperature={lead.lead_temperature} />
-                      </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">
-                        <div>
-                          <p>{lead.city}/{lead.state}</p>
-                          {lead.neighborhood && (
-                            <p className="text-xs text-muted-foreground">{lead.neighborhood}</p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1">
-                          <Star className="w-4 h-4 fill-warning text-warning" />
-                          <span className="text-sm font-medium">{lead.rating}</span>
-                          <span className="text-xs text-muted-foreground">({lead.total_reviews})</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          {lead.website_url && (
-                            <Globe className="w-4 h-4 text-success" />
-                          )}
-                          {lead.phone && (
-                            <Phone className="w-4 h-4 text-primary" />
-                          )}
-                          {lead.email && (
-                            <Mail className="w-4 h-4 text-accent" />
-                          )}
-                          {lead.has_whatsapp && (
-                            <MessageCircle className="w-4 h-4 text-success" />
-                          )}
-                          {lead.instagram_url && (
-                            <Instagram className="w-4 h-4 text-pink-500" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge className={cn("rounded-full", stageConfig[lead.stage].className)}>
-                          {stageConfig[lead.stage].label}
-                        </Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center">
+                        <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
                       </td>
                     </tr>
-                  ))}
+                  ) : paginatedLeads.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-muted-foreground">
+                        Nenhum lead encontrado
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedLeads.map((lead, index) => {
+                      const stage = lead.stage || 'new';
+                      const stageInfo = stageConfig[stage] || stageConfig.new;
+                      
+                      return (
+                        <tr 
+                          key={lead.id} 
+                          className="hover:bg-muted/30 transition-colors animate-fade-in cursor-pointer"
+                          style={{ animationDelay: `${index * 30}ms` }}
+                        >
+                          <td className="px-4 py-3">
+                            <Checkbox 
+                              checked={selectedLeads.includes(lead.id)}
+                              onCheckedChange={() => toggleLeadSelection(lead.id)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={cn(
+                              "inline-flex items-center justify-center w-10 h-10 rounded-xl font-bold text-sm",
+                              getScoreColor(lead.lead_score || 0)
+                            )}>
+                              {lead.lead_score || 0}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Link to={`/leads/${lead.id}`} className="hover:text-primary transition-colors">
+                              <p className="font-medium text-card-foreground">{lead.business_name}</p>
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3">
+                            <LeadTemperatureBadge temperature={getTemperature(lead.lead_score, lead.stage)} />
+                          </td>
+                          <td className="px-4 py-3 text-sm text-muted-foreground">
+                            <div>
+                              <p>{lead.city || '-'}/{lead.state || '-'}</p>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-1">
+                              <Star className="w-4 h-4 fill-warning text-warning" />
+                              <span className="text-sm font-medium">{lead.rating || '-'}</span>
+                              <span className="text-xs text-muted-foreground">({lead.total_reviews || 0})</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              {lead.website_url && (
+                                <Globe className="w-4 h-4 text-success" />
+                              )}
+                              {lead.phone && (
+                                <Phone className="w-4 h-4 text-primary" />
+                              )}
+                              {lead.email && (
+                                <Mail className="w-4 h-4 text-accent" />
+                              )}
+                              {lead.has_whatsapp && (
+                                <MessageCircle className="w-4 h-4 text-success" />
+                              )}
+                              {lead.instagram_url && (
+                                <Instagram className="w-4 h-4 text-pink-500" />
+                              )}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge className={cn("rounded-full", stageInfo.className)}>
+                              {stageInfo.label}
+                            </Badge>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -333,7 +351,7 @@ export default function Leads() {
             {/* Pagination */}
             <div className="flex items-center justify-between px-4 py-3 border-t border-border">
               <p className="text-sm text-muted-foreground">
-                Mostrando {((currentPage - 1) * leadsPerPage) + 1} a {Math.min(currentPage * leadsPerPage, filteredLeads.length)} de {filteredLeads.length}
+                Mostrando {filteredLeads.length > 0 ? ((currentPage - 1) * leadsPerPage) + 1 : 0} a {Math.min(currentPage * leadsPerPage, filteredLeads.length)} de {filteredLeads.length}
               </p>
               <div className="flex items-center gap-2">
                 <Button 
@@ -358,7 +376,7 @@ export default function Leads() {
                 <Button 
                   variant="outline" 
                   size="sm"
-                  disabled={currentPage === totalPages}
+                  disabled={currentPage === totalPages || totalPages === 0}
                   onClick={() => setCurrentPage(p => p + 1)}
                 >
                   <ChevronRight className="w-4 h-4" />

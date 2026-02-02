@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Search, MoreHorizontal, Play, Pause, Trash2, MapPin, Users } from 'lucide-react';
+import { Plus, Search, MoreHorizontal, Play, Pause, Trash2, MapPin, Users, Loader2 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { mockCampaigns } from '@/data/mockData';
+import { useCampaigns, useCampaignStats } from '@/hooks/useCampaigns';
 import { cn } from '@/lib/utils';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
@@ -32,13 +32,16 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 
 export default function Campaigns() {
   const [searchQuery, setSearchQuery] = useState('');
+  const { data: campaigns, isLoading } = useCampaigns();
+  const { data: stats } = useCampaignStats();
 
-  const filteredCampaigns = mockCampaigns.filter((campaign) =>
+  const filteredCampaigns = (campaigns || []).filter((campaign) =>
     campaign.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     campaign.search_location.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('pt-BR', {
       day: '2-digit',
       month: 'short',
@@ -64,14 +67,14 @@ export default function Campaigns() {
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Total de Campanhas</CardDescription>
-              <CardTitle className="text-2xl">{mockCampaigns.length}</CardTitle>
+              <CardTitle className="text-2xl">{stats?.total || 0}</CardTitle>
             </CardHeader>
           </Card>
           <Card>
             <CardHeader className="pb-2">
               <CardDescription>Em Execução</CardDescription>
               <CardTitle className="text-2xl text-warning">
-                {mockCampaigns.filter((c) => c.status === 'running').length}
+                {stats?.running || 0}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -79,7 +82,7 @@ export default function Campaigns() {
             <CardHeader className="pb-2">
               <CardDescription>Concluídas</CardDescription>
               <CardTitle className="text-2xl text-success">
-                {mockCampaigns.filter((c) => c.status === 'completed').length}
+                {stats?.completed || 0}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -87,7 +90,7 @@ export default function Campaigns() {
             <CardHeader className="pb-2">
               <CardDescription>Total de Leads</CardDescription>
               <CardTitle className="text-2xl text-primary">
-                {mockCampaigns.reduce((acc, c) => acc + c.total_leads, 0)}
+                {stats?.totalLeads || 0}
               </CardTitle>
             </CardHeader>
           </Card>
@@ -124,96 +127,107 @@ export default function Campaigns() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredCampaigns.length === 0 ? (
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8">
+                        <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredCampaigns.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                         Nenhuma campanha encontrada
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredCampaigns.map((campaign) => (
-                      <TableRow key={campaign.id} className="cursor-pointer hover:bg-muted/50">
-                        <TableCell>
-                          <Link 
-                            to={`/leads?campaign=${campaign.id}`}
-                            className="font-medium hover:text-primary transition-colors"
-                          >
-                            {campaign.name}
-                          </Link>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1 text-muted-foreground">
-                            <MapPin className="h-4 w-4" />
-                            {campaign.search_location}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex flex-wrap gap-1">
-                            {campaign.search_niches.slice(0, 2).map((niche, i) => (
-                              <Badge key={i} variant="outline" className="text-xs">
-                                {niche}
-                              </Badge>
-                            ))}
-                            {campaign.search_niches.length > 2 && (
-                              <Badge variant="outline" className="text-xs">
-                                +{campaign.search_niches.length - 2}
-                              </Badge>
-                            )}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <Users className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{campaign.total_leads}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            className={cn(
-                              "font-normal",
-                              statusConfig[campaign.status].color
-                            )}
-                          >
-                            {statusConfig[campaign.status].label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {formatDate(campaign.created_at)}
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem asChild>
-                                <Link to={`/leads?campaign=${campaign.id}`}>
-                                  <Users className="h-4 w-4 mr-2" />
-                                  Ver Leads
-                                </Link>
-                              </DropdownMenuItem>
-                              {campaign.status === 'running' ? (
-                                <DropdownMenuItem>
-                                  <Pause className="h-4 w-4 mr-2" />
-                                  Pausar
+                    filteredCampaigns.map((campaign) => {
+                      const status = campaign.status || 'draft';
+                      const config = statusConfig[status] || statusConfig.draft;
+                      
+                      return (
+                        <TableRow key={campaign.id} className="cursor-pointer hover:bg-muted/50">
+                          <TableCell>
+                            <Link 
+                              to={`/leads?campaign=${campaign.id}`}
+                              className="font-medium hover:text-primary transition-colors"
+                            >
+                              {campaign.name}
+                            </Link>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1 text-muted-foreground">
+                              <MapPin className="h-4 w-4" />
+                              {campaign.search_location}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-wrap gap-1">
+                              {campaign.search_niches.slice(0, 2).map((niche, i) => (
+                                <Badge key={i} variant="outline" className="text-xs">
+                                  {niche}
+                                </Badge>
+                              ))}
+                              {campaign.search_niches.length > 2 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{campaign.search_niches.length - 2}
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <Users className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">{campaign.total_leads || 0}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              className={cn(
+                                "font-normal",
+                                config.color
+                              )}
+                            >
+                              {config.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground">
+                            {formatDate(campaign.created_at)}
+                          </TableCell>
+                          <TableCell>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem asChild>
+                                  <Link to={`/leads?campaign=${campaign.id}`}>
+                                    <Users className="h-4 w-4 mr-2" />
+                                    Ver Leads
+                                  </Link>
                                 </DropdownMenuItem>
-                              ) : campaign.status === 'paused' ? (
-                                <DropdownMenuItem>
-                                  <Play className="h-4 w-4 mr-2" />
-                                  Retomar
+                                {status === 'running' ? (
+                                  <DropdownMenuItem>
+                                    <Pause className="h-4 w-4 mr-2" />
+                                    Pausar
+                                  </DropdownMenuItem>
+                                ) : status === 'paused' ? (
+                                  <DropdownMenuItem>
+                                    <Play className="h-4 w-4 mr-2" />
+                                    Retomar
+                                  </DropdownMenuItem>
+                                ) : null}
+                                <DropdownMenuItem className="text-destructive">
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Excluir
                                 </DropdownMenuItem>
-                              ) : null}
-                              <DropdownMenuItem className="text-destructive">
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Excluir
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>

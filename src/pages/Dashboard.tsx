@@ -4,9 +4,18 @@ import { LeadsChart } from '@/components/dashboard/LeadsChart';
 import { CampaignsList } from '@/components/dashboard/CampaignsList';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
 import { Users, UserCheck, TrendingUp, Coins } from 'lucide-react';
-import { mockMetrics } from '@/data/mockData';
+import { useLeadsCount, useQualifiedLeadsCount } from '@/hooks/useLeads';
+import { useCompanyCredits } from '@/hooks/useCompany';
 
 export default function Dashboard() {
+  const { data: totalLeads = 0 } = useLeadsCount();
+  const { data: qualifiedLeads = 0 } = useQualifiedLeadsCount();
+  const { data: creditsRemaining = 0 } = useCompanyCredits();
+
+  const conversionRate = totalLeads > 0 
+    ? ((qualifiedLeads / totalLeads) * 100).toFixed(1) 
+    : '0';
+
   return (
     <AppLayout 
       title="Dashboard" 
@@ -16,7 +25,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <MetricCard
           title="Total de Leads"
-          value={mockMetrics.totalLeads}
+          value={totalLeads}
           change="+12% vs mês anterior"
           changeType="positive"
           icon={Users}
@@ -25,7 +34,7 @@ export default function Dashboard() {
         />
         <MetricCard
           title="Leads Qualificados"
-          value={mockMetrics.qualifiedLeads}
+          value={qualifiedLeads}
           change="+8% vs mês anterior"
           changeType="positive"
           icon={UserCheck}
@@ -34,7 +43,7 @@ export default function Dashboard() {
         />
         <MetricCard
           title="Taxa de Conversão"
-          value={`${mockMetrics.conversionRate}%`}
+          value={`${conversionRate}%`}
           change="+2.3% vs mês anterior"
           changeType="positive"
           icon={TrendingUp}
@@ -43,7 +52,7 @@ export default function Dashboard() {
         />
         <MetricCard
           title="Créditos Restantes"
-          value={mockMetrics.creditsRemaining}
+          value={creditsRemaining}
           change="de 500 disponíveis"
           changeType="neutral"
           icon={Coins}
