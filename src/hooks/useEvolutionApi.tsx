@@ -266,23 +266,76 @@ export function EvolutionProvider({ children }: { children: ReactNode }) {
       return false;
     }
 
-    // Clean phone number
+    // Clean phone number - remove non-digits
     const cleanPhone = phone.replace(/\D/g, '');
     
+    if (!cleanPhone || cleanPhone.length < 10) {
+      toast({
+        title: 'Número inválido',
+        description: 'O número de telefone é inválido ou muito curto',
+        variant: 'destructive',
+      });
+      return false;
+    }
+
+    if (!message.trim()) {
+      toast({
+        title: 'Mensagem vazia',
+        description: 'Digite uma mensagem para enviar',
+        variant: 'destructive',
+      });
+      return false;
+    }
+    
     try {
-      await makeRequest(`message/sendText/${config.instanceName}`, 'POST', {
+      addLog('info', `Enviando mensagem para ${cleanPhone}...`);
+      
+      const response = await makeRequest(`message/sendText/${config.instanceName}`, 'POST', {
         number: cleanPhone,
-        text: message,
+        text: message.trim(),
       });
       
+      // Check for specific Evolution API error responses
+      if (response?.response && Array.isArray(response.response)) {
+        const numberStatus = response.response[0];
+        if (numberStatus?.exists === false) {
+          const formattedNumber = cleanPhone.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+          toast({
+            title: 'Número não encontrado no WhatsApp',
+            description: `O número ${formattedNumber} não está registrado no WhatsApp`,
+            variant: 'destructive',
+          });
+          addLog('error', `Número ${cleanPhone} não encontrado no WhatsApp`);
+          return false;
+        }
+      }
+      
       addLog('success', `Mensagem enviada para ${cleanPhone}`);
+      toast({
+        title: 'Mensagem enviada!',
+        description: `Enviada com sucesso para ${cleanPhone}`,
+      });
       return true;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
       addLog('error', `Falha ao enviar mensagem: ${errorMessage}`);
+      
+      // Parse error for more user-friendly messages
+      let userFriendlyMessage = errorMessage;
+      
+      if (errorMessage.includes('exists":false')) {
+        userFriendlyMessage = 'Este número não está registrado no WhatsApp';
+      } else if (errorMessage.includes('400')) {
+        userFriendlyMessage = 'Número de telefone inválido ou não encontrado no WhatsApp';
+      } else if (errorMessage.includes('401') || errorMessage.includes('403')) {
+        userFriendlyMessage = 'Erro de autenticação - verifique sua API Key';
+      } else if (errorMessage.includes('CORS') || errorMessage.includes('fetch')) {
+        userFriendlyMessage = 'Erro de conexão - verifique a URL da API';
+      }
+      
       toast({
         title: 'Falha ao enviar mensagem',
-        description: errorMessage,
+        description: userFriendlyMessage,
         variant: 'destructive',
       });
       return false;
