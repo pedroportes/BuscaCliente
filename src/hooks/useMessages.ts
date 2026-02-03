@@ -24,6 +24,28 @@ export function useMessages() {
   });
 }
 
+export function useLeadMessages(leadId?: string) {
+  return useQuery({
+    queryKey: ['messages', leadId],
+    enabled: Boolean(leadId),
+    queryFn: async () => {
+      if (!leadId) return [] as Message[];
+
+      const { data, error } = await supabase
+        .from('messages')
+        .select(`
+          *,
+          lead:leads(*)
+        `)
+        .eq('lead_id', leadId)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      return (data || []) as Message[];
+    },
+  });
+}
+
 export function useMessageStats() {
   return useQuery({
     queryKey: ['message-stats'],
