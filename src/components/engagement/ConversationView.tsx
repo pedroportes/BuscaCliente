@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -44,7 +44,25 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
   const [isSending, setIsSending] = useState(false);
 
   // Filter messages for the selected lead
-  const leadMessages = allMessages.filter(msg => msg.lead_id === lead?.id);
+  const leadMessages = useMemo(() => {
+    if (!lead?.id) return [];
+    return allMessages.filter((msg) => msg.lead_id === lead.id);
+  }, [allMessages, lead?.id]);
+
+  // Debug instrumentation (helps diagnose lead/message mismatch)
+  useEffect(() => {
+    if (!lead) return;
+    const leadId = lead.id;
+    const sample = allMessages.slice(0, 5).map((m) => ({ id: m.id, lead_id: m.lead_id, direction: m.direction }));
+    // eslint-disable-next-line no-console
+    console.log('[ConversationView] lead selected', {
+      leadId,
+      leadPhone: lead.phone,
+      allMessagesCount: allMessages.length,
+      leadMessagesCount: allMessages.filter((m) => m.lead_id === leadId).length,
+      sample,
+    });
+  }, [lead, allMessages]);
 
   // Sort messages by date (oldest first for chat view)
   const sortedMessages = [...leadMessages].sort((a, b) => {
@@ -234,6 +252,9 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
           </div>
           
           <div className="flex items-center gap-1">
+            <Badge variant="secondary" className="text-[10px] h-5 px-2">
+              Mensagens: {leadMessages.length}
+            </Badge>
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => refetch()}>
               <RefreshCw className="w-4 h-4" />
             </Button>
@@ -287,6 +308,9 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
               <MessageCircle className="w-10 h-10 mx-auto mb-2 opacity-20" />
               <p className="text-sm">Nenhuma mensagem ainda</p>
               <p className="text-xs">Envie a primeira mensagem</p>
+              <p className="text-[10px] mt-2 opacity-70">
+                Debug: lead_id atual = <span className="font-mono">{lead.id}</span>
+              </p>
             </div>
           </div>
         ) : (
