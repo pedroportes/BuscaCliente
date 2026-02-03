@@ -67,19 +67,24 @@ function generatePhoneVariants(phone: string): string[] {
 }
 
 // Find lead by phone number (try multiple formats)
-async function findLeadByPhone(supabase: any, phone: string): Promise<any | null> {
+async function findLeadByPhone(supabase: any, phone: string, companyId?: string | null): Promise<any | null> {
   const variants = generatePhoneVariants(phone);
   
   console.log(`Searching for phone variants: ${variants.join(', ')}`);
   
   for (const variant of variants) {
     // Search using LIKE to handle different storage formats
-    const { data, error } = await supabase
+    let query = supabase
       .from('leads')
       .select('id, business_name, phone, company_id')
-      .or(`phone.ilike.%${variant}%,phone.eq.${variant}`)
-      .limit(1)
-      .single();
+      .or(`phone.ilike.%${variant}%,phone.eq.${variant}`);
+
+    // Enforce tenant isolation (matches RLS used by the frontend)
+    if (companyId) {
+      query = query.eq('company_id', companyId);
+    }
+
+    const { data, error } = await query.limit(1).single();
     
     if (data && !error) {
       console.log(`Found lead with variant: ${variant}`);
@@ -88,6 +93,49 @@ async function findLeadByPhone(supabase: any, phone: string): Promise<any | null
   }
   
   return null;
+}
+
+async function resolveCompanyIdFromWebhook(supabase: any, payload: any, req: Request): Promise<string | null> {
+  const instance = payload?.instance || payload?.data?.instance || payload?.data?.instanceName;
+
+  // Evolution tends to send apikey in the JSON payload; also accept header fallback.
+  const apiKey = payload?.apikey || req.headers.get('apikey') || req.headers.get('x-api-key');
+
+  if (!apiKey && !instance) {
+    console.log('No apiKey/instance provided by webhook; cannot resolve company_id');
+    return null;
+  }
+
+  // Try to map webhook to the correct company via integrations
+  // credentials format (current): { apiKey, instance, url }
+  let q = supabase
+    .from('integrations')
+    .select('company_id, provider, is_active, credentials')
+    .eq('provider', 'evolution_api')
+    .eq('is_active', true);
+
+  if (apiKey && instance) {
+    q = q.or(`credentials->>apiKey.eq.${apiKey},credentials->>instance.eq.${instance}`);
+  } else if (apiKey) {
+    q = q.eq('credentials->>apiKey', apiKey);
+  } else if (instance) {
+    q = q.eq('credentials->>instance', instance);
+  }
+
+  const { data, error } = await q.limit(1).maybeSingle();
+
+  if (error) {
+    console.error('Error resolving company from integrations:', error);
+    return null;
+  }
+
+  if (!data?.company_id) {
+    console.log('No integration match found for webhook apiKey/instance');
+    return null;
+  }
+
+  console.log(`Resolved company_id from integration: ${data.company_id}`);
+  return data.company_id;
 }
 
 serve(async (req) => {
@@ -110,6 +158,9 @@ serve(async (req) => {
     const event = payload.event || payload.type;
     const data = payload.data || payload;
     
+    // Resolve tenant/company for this webhook event (required for RLS visibility on frontend)
+    const companyId = await resolveCompanyIdFromWebhook(supabase, payload, req);
+
     // Handle incoming messages
     if (event === 'messages.upsert' || event === 'message' || data.message) {
       const messageData = data.message || data;
@@ -185,8 +236,8 @@ serve(async (req) => {
 
       console.log(`Incoming message from ${phone}: "${body}"`);
 
-      // Find lead by phone number
-      const lead = await findLeadByPhone(supabase, phone);
+      // Find lead by phone number (scoped to the resolved company to avoid mismatches across tenants)
+      const lead = await findLeadByPhone(supabase, phone, companyId);
       
       if (!lead) {
         console.log(`Lead not found for phone: ${phone}`);
@@ -195,6 +246,7 @@ serve(async (req) => {
             success: false, 
             error: 'Lead not found', 
             phone,
+            company_id: companyId,
             note: 'Consider creating a new lead for unknown contacts'
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 404 }
