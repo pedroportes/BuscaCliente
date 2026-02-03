@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -17,7 +17,7 @@ import {
   Building2
 } from 'lucide-react';
 import { Lead } from '@/hooks/useLeads';
-import { Message, useMessages } from '@/hooks/useMessages';
+import { Message, useLeadMessages } from '@/hooks/useMessages';
 import { MessageStatusBadge } from './MessageStatusBadge';
 import { ChannelIcon } from './ChannelIcon';
 import { useEvolutionApi } from '@/hooks/useEvolutionApi';
@@ -36,33 +36,14 @@ interface ConversationViewProps {
 export function ConversationView({ lead, onMessageSent }: ConversationViewProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: allMessages = [], isLoading, refetch } = useMessages();
+  const { data: leadMessages = [], isLoading, refetch } = useLeadMessages(lead?.id);
   const { status: evolutionStatus, isConfigured: isEvolutionConfigured, sendWhatsAppMessage } = useEvolutionApi();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
 
-  // Filter messages for the selected lead
-  const leadMessages = useMemo(() => {
-    if (!lead?.id) return [];
-    return allMessages.filter((msg) => msg.lead_id === lead.id);
-  }, [allMessages, lead?.id]);
-
-  // Debug instrumentation (helps diagnose lead/message mismatch)
-  useEffect(() => {
-    if (!lead) return;
-    const leadId = lead.id;
-    const sample = allMessages.slice(0, 5).map((m) => ({ id: m.id, lead_id: m.lead_id, direction: m.direction }));
-    // eslint-disable-next-line no-console
-    console.log('[ConversationView] lead selected', {
-      leadId,
-      leadPhone: lead.phone,
-      allMessagesCount: allMessages.length,
-      leadMessagesCount: allMessages.filter((m) => m.lead_id === leadId).length,
-      sample,
-    });
-  }, [lead, allMessages]);
+  // NOTE: We fetch messages already filtered by lead_id (more reliable + avoids 1000-row limit issues)
 
   // Sort messages by date (oldest first for chat view)
   const sortedMessages = [...leadMessages].sort((a, b) => {
