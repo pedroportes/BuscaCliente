@@ -18,6 +18,7 @@ import NewCampaign from "./pages/NewCampaign";
 import Engagement from "./pages/Engagement";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import WebhookTest from "./pages/WebhookTest";
 
 const queryClient = new QueryClient();
 
@@ -68,6 +69,11 @@ const App = () => (
               <Route path="/settings" element={
                 <ProtectedRoute>
                   <Settings />
+                </ProtectedRoute>
+              } />
+              <Route path="/webhook-test" element={
+                <ProtectedRoute>
+                  <WebhookTest />
                 </ProtectedRoute>
               } />
               <Route path="*" element={<NotFound />} />
