@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 import { 
   Play, 
   Loader2, 
@@ -83,47 +84,48 @@ export default function WebhookTest() {
     console.log('[WebhookTest] Disparando webhook:', { url: webhookUrl, payload });
 
     try {
-      const res = await fetch(webhookUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+      // Use Edge Function proxy to avoid CORS
+      const { data, error } = await supabase.functions.invoke('n8n-webhook-proxy', {
+        body: {
+          webhook_url: webhookUrl,
+          campaign_id: campaignId,
+          company_id: companyId,
+          search_location: searchLocation,
+          search_niches: searchNiches.split(',').map(n => n.trim()).filter(Boolean),
+          radius_km: parseInt(radiusKm) || 20,
+          started_at: new Date().toISOString(),
+        }
       });
 
       const elapsed = Date.now() - startTime;
       setRequestTime(elapsed);
 
-      const text = await res.text();
-      setRawResponse(text);
+      console.log('[WebhookTest] Proxy response:', { data, error });
 
-      console.log('[WebhookTest] Resposta:', { status: res.status, text });
-
-      if (!res.ok) {
-        setError(`HTTP ${res.status}: ${res.statusText}`);
+      if (error) {
+        setError(error.message);
+        setRawResponse(JSON.stringify(error, null, 2));
         toast({
           title: 'Erro na requisição',
-          description: `O webhook retornou status ${res.status}`,
+          description: error.message,
           variant: 'destructive',
         });
         return;
       }
 
-      try {
-        const data = JSON.parse(text);
-        setResponse(data);
-        
-        if (data.success) {
-          toast({
-            title: 'Raspagem concluída!',
-            description: `${data.total_leads || 0} leads encontrados em ${(elapsed / 1000).toFixed(1)}s`,
-          });
-        } else if (data.error) {
-          setError(data.error);
-        }
-      } catch {
-        // Response não é JSON válido
-        console.log('[WebhookTest] Resposta não é JSON:', text);
+      setRawResponse(JSON.stringify(data, null, 2));
+
+      if (data?.success && data?.data) {
+        setResponse(data.data);
+        toast({
+          title: 'Raspagem concluída!',
+          description: `${data.data.total_leads || 0} leads encontrados em ${(elapsed / 1000).toFixed(1)}s`,
+        });
+      } else if (data?.error) {
+        setError(data.error);
+      } else {
+        // Webhook returned but maybe with different structure
+        setResponse(data?.data || data);
       }
     } catch (err) {
       const elapsed = Date.now() - startTime;
