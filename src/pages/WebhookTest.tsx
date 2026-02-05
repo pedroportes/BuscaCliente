@@ -40,7 +40,7 @@ interface WebhookResponse {
 export default function WebhookTest() {
   const { toast } = useToast();
   
-  const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookUrl, setWebhookUrl] = useState('https://novon8n.hidrocuritiba.com.br/webhook-test/google-maps-scraper');
   const [campaignId, setCampaignId] = useState('test-campaign-001');
   const [companyId, setCompanyId] = useState('00000000-0000-0000-0000-000000000001');
   const [searchLocation, setSearchLocation] = useState('Curitiba, PR');
@@ -147,30 +147,6 @@ export default function WebhookTest() {
   return (
     <AppLayout title="Teste de Webhook" subtitle="Teste a raspagem de leads via n8n">
       <div className="max-w-4xl space-y-6">
-
-        {/* Alertas sobre problemas conhecidos */}
-        <Card className="border-warning bg-warning/10">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-lg flex items-center gap-2 text-warning">
-              <AlertTriangle className="h-5 w-5" />
-              Problemas Detectados no Workflow
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex items-start gap-2">
-              <XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-              <span><strong>Coordenadas fixas:</strong> O locationBias está hardcoded para Curitiba - não usa a localização dinâmica</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-              <span><strong>Supabase Insert:</strong> Falta configurar o tableId: "leads" no nó de inserção</span>
-            </div>
-            <div className="flex items-start gap-2">
-              <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
-              <span><strong>Scrape response:</strong> O caminho websiteResponse.json.data pode estar incorreto</span>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Formulário de teste */}
         <Card>
