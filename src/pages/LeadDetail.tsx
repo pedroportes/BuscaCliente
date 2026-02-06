@@ -7,7 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { 
   ArrowLeft, 
   Star, 
@@ -44,6 +47,9 @@ export default function LeadDetail() {
   const [generatedCopy, setGeneratedCopy] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [newNote, setNewNote] = useState('');
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [emailSubject, setEmailSubject] = useState('');
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   const { data: lead, isLoading } = useQuery({
     queryKey: ['lead', id],
@@ -112,6 +118,62 @@ export default function LeadDetail() {
       setIsGenerating(false);
     }
   }, [lead, toast]);
+
+  const handleOpenEmailDialog = () => {
+    if (!lead?.email) {
+      toast({
+        title: 'Email não disponível',
+        description: 'Este lead não possui email cadastrado.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setEmailSubject(`FlowDrain - Proposta para ${lead.business_name}`);
+    setEmailDialogOpen(true);
+  };
+
+  const handleSendEmail = useCallback(async () => {
+    if (!lead?.email || !generatedCopy || !emailSubject) return;
+    setIsSendingEmail(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('send-email', {
+        body: {
+          to: lead.email,
+          subject: emailSubject,
+          body: generatedCopy,
+          leadId: lead.id,
+          leadName: lead.business_name,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.error) {
+        toast({
+          title: 'Erro ao enviar email',
+          description: data.error,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      toast({
+        title: 'Email enviado! ✉️',
+        description: `Email enviado para ${lead.email} com sucesso.`,
+      });
+      setEmailDialogOpen(false);
+    } catch (err: any) {
+      console.error('Error sending email:', err);
+      toast({
+        title: 'Erro ao enviar email',
+        description: err.message || 'Tente novamente mais tarde.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSendingEmail(false);
+    }
+  }, [lead, generatedCopy, emailSubject, toast]);
 
   if (isLoading) {
     return (
@@ -326,7 +388,12 @@ export default function LeadDetail() {
                         <MessageCircle className="w-4 h-4" />
                         Enviar WhatsApp
                       </Button>
-                      <Button variant="outline" className="flex-1 gap-2" disabled={!generatedCopy}>
+                      <Button 
+                        variant="outline" 
+                        className="flex-1 gap-2" 
+                        disabled={!generatedCopy}
+                        onClick={handleOpenEmailDialog}
+                      >
                         <Mail className="w-4 h-4" />
                         Enviar Email
                       </Button>
@@ -415,6 +482,55 @@ export default function LeadDetail() {
           </Card>
         </div>
       </div>
+
+      {/* Email Dialog */}
+      <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enviar Email</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Para</Label>
+              <Input value={lead.email || ''} disabled />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="email-subject">Assunto</Label>
+              <Input
+                id="email-subject"
+                value={emailSubject}
+                onChange={(e) => setEmailSubject(e.target.value)}
+                placeholder="Assunto do email..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Mensagem</Label>
+              <Textarea
+                value={generatedCopy}
+                onChange={(e) => setGeneratedCopy(e.target.value)}
+                className="min-h-[150px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleSendEmail}
+              disabled={isSendingEmail || !emailSubject}
+              className="gradient-primary gap-2"
+            >
+              {isSendingEmail ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Send className="w-4 h-4" />
+              )}
+              {isSendingEmail ? 'Enviando...' : 'Enviar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AppLayout>
   );
 }
