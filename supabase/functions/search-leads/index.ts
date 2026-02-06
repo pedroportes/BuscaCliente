@@ -145,13 +145,28 @@ serve(async (req) => {
 
     for (const lead of leads) {
       try {
-        const { error: upsertError } = await supabaseAdmin
-          .from('leads')
-          .upsert(lead, { onConflict: 'google_maps_url' });
+        // Check if lead already exists by google_maps_url
+        if (lead.google_maps_url) {
+          const { data: existing } = await supabaseAdmin
+            .from('leads')
+            .select('id')
+            .eq('google_maps_url', lead.google_maps_url)
+            .maybeSingle();
+          
+          if (existing) {
+            console.log(`[search-leads] Skipping duplicate: "${lead.business_name}"`);
+            savedCount++;
+            continue;
+          }
+        }
 
-        if (upsertError) {
-          console.error(`[search-leads] Upsert error for "${lead.business_name}":`, upsertError.message);
-          errors.push(`${lead.business_name}: ${upsertError.message}`);
+        const { error: insertError } = await supabaseAdmin
+          .from('leads')
+          .insert(lead);
+
+        if (insertError) {
+          console.error(`[search-leads] Insert error for "${lead.business_name}":`, insertError.message);
+          errors.push(`${lead.business_name}: ${insertError.message}`);
         } else {
           savedCount++;
         }
