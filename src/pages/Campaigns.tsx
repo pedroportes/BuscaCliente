@@ -20,8 +20,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { useCampaigns, useCampaignStats } from '@/hooks/useCampaigns';
+import { useCampaigns, useCampaignStats, useDeleteCampaign } from '@/hooks/useCampaigns';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   draft: { label: 'Rascunho', color: 'bg-muted text-muted-foreground' },
@@ -34,7 +35,19 @@ export default function Campaigns() {
   const [searchQuery, setSearchQuery] = useState('');
   const { data: campaigns, isLoading } = useCampaigns();
   const { data: stats } = useCampaignStats();
+  const deleteCampaign = useDeleteCampaign();
 
+  const handleDeleteCampaign = async (campaignId: string, campaignName: string) => {
+    if (!confirm(`Tem certeza que deseja excluir a campanha "${campaignName}"?`)) return;
+    
+    try {
+      await deleteCampaign.mutateAsync(campaignId);
+      toast.success('Campanha excluída com sucesso!');
+    } catch (error) {
+      console.error('Delete campaign error:', error);
+      toast.error('Erro ao excluir campanha. Tente novamente.');
+    }
+  };
   const filteredCampaigns = (campaigns || []).filter((campaign) =>
     campaign.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     campaign.search_location.toLowerCase().includes(searchQuery.toLowerCase())
@@ -218,7 +231,10 @@ export default function Campaigns() {
                                     Retomar
                                   </DropdownMenuItem>
                                 ) : null}
-                                <DropdownMenuItem className="text-destructive">
+                                <DropdownMenuItem 
+                                  className="text-destructive"
+                                  onClick={() => handleDeleteCampaign(campaign.id, campaign.name)}
+                                >
                                   <Trash2 className="h-4 w-4 mr-2" />
                                   Excluir
                                 </DropdownMenuItem>
