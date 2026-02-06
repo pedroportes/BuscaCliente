@@ -54,7 +54,7 @@ const integrationConfigs: ApiIntegrationConfig[] = [
     description: 'Envio de emails transacionais',
     keyName: 'RESEND_API_KEY',
     icon: <div className="p-2 rounded-lg bg-teal-500/10"><Mail className="w-5 h-5 text-teal-500" /></div>,
-    hasExtraConfig: true,
+    isServerSecret: true,
   },
 ];
 
