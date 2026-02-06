@@ -187,9 +187,31 @@ Que tal uma demonstração gratuita de 15 minutos?
               )}
               <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl">
                 <MapPin className="w-5 h-5 text-destructive" />
-                <div>
+                <div className="flex-1 min-w-0">
                   <p className="text-xs text-muted-foreground">Localização</p>
-                  <p className="font-medium text-card-foreground">{lead.city || '-'}, {lead.state || '-'}</p>
+                  {lead.google_maps_url ? (
+                    <a 
+                      href={lead.google_maps_url} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="font-medium text-primary hover:underline flex items-center gap-1"
+                    >
+                      {lead.city || '-'}, {lead.state || '-'}
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : lead.full_address ? (
+                    <a 
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lead.full_address)}`} 
+                      target="_blank" 
+                      rel="noopener noreferrer" 
+                      className="font-medium text-primary hover:underline flex items-center gap-1"
+                    >
+                      {lead.city || '-'}, {lead.state || '-'}
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  ) : (
+                    <p className="font-medium text-card-foreground">{lead.city || '-'}, {lead.state || '-'}</p>
+                  )}
                 </div>
               </div>
               {lead.website_url && (

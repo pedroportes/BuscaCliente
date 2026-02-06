@@ -21,7 +21,8 @@ import {
   MoreHorizontal,
   ArrowUpDown,
   Instagram,
-  Loader2
+  Loader2,
+  ExternalLink
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -301,7 +302,20 @@ export default function Leads() {
                           </td>
                           <td className="px-4 py-3 text-sm text-muted-foreground">
                             <div>
-                              <p>{lead.city || '-'}/{lead.state || '-'}</p>
+                              {lead.google_maps_url ? (
+                                <a 
+                                  href={lead.google_maps_url} 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-primary hover:underline flex items-center gap-1"
+                                >
+                                  {lead.city || '-'}/{lead.state || '-'}
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              ) : (
+                                <p>{lead.city || '-'}/{lead.state || '-'}</p>
+                              )}
                             </div>
                           </td>
                           <td className="px-4 py-3">
