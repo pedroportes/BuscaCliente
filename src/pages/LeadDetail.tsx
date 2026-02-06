@@ -69,18 +69,22 @@ export default function LeadDetail() {
   const handleGenerateCopy = () => {
     if (!lead) return;
     setIsGenerating(true);
-    // Mock AI generation - TODO: Conectar com Google Gemini via Edge Function
+    // Mock AI generation - TODO: Conectar com IA real via Edge Function
     setTimeout(() => {
-      setGeneratedCopy(`Olá! Somos a GestãoFlow, uma solução completa para gestão de empresas.
+      setGeneratedCopy(`[EXEMPLO - Mensagem fictícia para demonstração]
+
+Olá! Somos o FlowDrain, a solução completa para gestão de desentupidoras.
 
 Notamos que a ${lead.business_name} tem excelente reputação em ${lead.city || 'sua região'}, com ${lead.total_reviews || 0} avaliações positivas! 
 
 Queremos ajudar vocês a crescer ainda mais com:
-✅ Agendamento automatizado
-✅ Controle financeiro
+✅ Agendamento de serviços automatizado
+✅ Controle de ordens de serviço
 ✅ CRM para clientes
 
-Que tal uma demonstração gratuita de 15 minutos?`);
+Que tal uma demonstração gratuita de 15 minutos?
+
+⚠️ Esta mensagem é um exemplo. Conecte uma IA real para gerar copies personalizadas.`);
       setIsGenerating(false);
     }, 2000);
   };
@@ -324,25 +328,6 @@ Que tal uma demonstração gratuita de 15 minutos?`);
 
         {/* Sidebar */}
         <div className="space-y-6">
-          {/* Quick Actions */}
-          <Card className="p-6 bg-card border-0 shadow-md">
-            <h3 className="font-semibold mb-4">Ações Rápidas</h3>
-            <div className="space-y-2">
-              <Button variant="outline" className="w-full justify-start gap-2">
-                <Mail className="w-4 h-4" />
-                Enviar Email
-              </Button>
-              <Button variant="outline" className="w-full justify-start gap-2">
-                <MessageCircle className="w-4 h-4" />
-                Enviar WhatsApp
-              </Button>
-              <Button variant="outline" className="w-full justify-start gap-2">
-                <Phone className="w-4 h-4" />
-                Ligar
-              </Button>
-            </div>
-          </Card>
-
           {/* Score Breakdown */}
           <Card className="p-6 bg-card border-0 shadow-md">
             <h3 className="font-semibold mb-4">Breakdown do Score</h3>
