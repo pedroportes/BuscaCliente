@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Check, Search, MapPin, Target } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,6 +52,7 @@ export default function NewCampaign() {
   const navigate = useNavigate();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSearching, setIsSearching] = useState(false);
+  const [campaignId, setCampaignId] = useState<string | undefined>();
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -84,11 +86,34 @@ export default function NewCampaign() {
 
   const handleScrapingComplete = (leadsCount: number) => {
     console.log(`Scraping completed with ${leadsCount} leads`);
-    // In real app, would save to Supabase here
-    navigate('/campaigns');
+    navigate('/leads');
   };
 
-  const handleStartSearch = () => {
+  const handleStartSearch = async () => {
+    // Create campaign in Supabase first
+    try {
+      const { data: campaignData, error: campaignError } = await supabase
+        .from('campaigns')
+        .insert({
+          name: watchedValues.name,
+          search_location: watchedValues.location || '',
+          search_niches: watchedValues.niches || [],
+          status: 'running',
+          started_at: new Date().toISOString(),
+          company_id: '00000000-0000-0000-0000-000000000001',
+        })
+        .select('id')
+        .single();
+
+      if (campaignError) {
+        console.error('Error creating campaign:', campaignError);
+      } else {
+        setCampaignId(campaignData.id);
+      }
+    } catch (err) {
+      console.error('Error creating campaign:', err);
+    }
+
     setIsSearching(true);
   };
 
@@ -409,6 +434,9 @@ export default function NewCampaign() {
       <ScrapingProgressModal 
         open={isSearching}
         location={watchedValues.location || ''}
+        niches={watchedValues.niches || []}
+        campaignId={campaignId}
+        companyId="00000000-0000-0000-0000-000000000001"
         onComplete={handleScrapingComplete}
       />
     </AppLayout>
