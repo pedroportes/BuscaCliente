@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   Users, 
@@ -15,6 +15,8 @@ import { Button } from '@/components/ui/button';
 import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useAuth } from '@/contexts/AuthContext';
+import { toast } from 'sonner';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
@@ -26,6 +28,18 @@ const menuItems = [
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { signOut } = useAuth();
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('Erro ao sair. Tente novamente.');
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -73,7 +87,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         <Button
           variant="ghost"
           className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
-          onClick={() => {}}
+          onClick={handleLogout}
         >
           <LogOut className="w-5 h-5" />
           <span className="ml-3">Sair</span>

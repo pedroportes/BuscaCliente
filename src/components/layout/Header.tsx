@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useCompanyCredits } from '@/hooks/useCompany';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { toast } from 'sonner';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,8 +32,13 @@ export function Header({ title, subtitle }: HeaderProps) {
   const userInitials = userName.slice(0, 2).toUpperCase();
 
   const handleLogout = async () => {
-    await signOut();
-    navigate('/login');
+    try {
+      await signOut();
+      navigate('/login');
+    } catch (error) {
+      console.error('Logout error:', error);
+      toast.error('Erro ao sair. Tente novamente.');
+    }
   };
 
   return (
