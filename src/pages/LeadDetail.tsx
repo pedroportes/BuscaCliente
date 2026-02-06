@@ -126,8 +126,8 @@ Que tal uma demonstração gratuita de 15 minutos?`);
         {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
           {/* Header Card */}
-          <Card className="p-6 bg-card border-0 shadow-md">
-            <div className="flex items-start justify-between mb-6">
+          <Card className="p-4 md:p-6 bg-card border-0 shadow-md">
+            <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-6">
               <div className="flex items-center gap-4">
                 <div className={cn(
                   "w-16 h-16 rounded-2xl flex items-center justify-center font-bold text-2xl border-2",
@@ -162,7 +162,7 @@ Que tal uma demonstração gratuita de 15 minutos?`);
             </div>
 
             {/* Contact Info Grid */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {lead.phone && (
                 <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl">
                   <Phone className="w-5 h-5 text-primary" />
@@ -205,7 +205,7 @@ Que tal uma demonstração gratuita de 15 minutos?`);
           {/* Tabs */}
           <Card className="bg-card border-0 shadow-md overflow-hidden">
             <Tabs defaultValue="engagement" className="w-full">
-              <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-12 px-4">
+              <TabsList className="w-full justify-start rounded-none border-b bg-transparent h-12 px-2 md:px-4 overflow-x-auto">
                 <TabsTrigger value="overview" className="data-[state=active]:border-b-2 data-[state=active]:border-primary rounded-none">
                   Visão Geral
                 </TabsTrigger>

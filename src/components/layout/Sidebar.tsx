@@ -6,12 +6,15 @@ import {
   MessageSquare, 
   Settings,
   Droplets,
-  ChevronLeft,
-  LogOut
+  LogOut,
+  Menu,
+  X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
@@ -21,28 +24,20 @@ const menuItems = [
   { icon: Settings, label: 'Configurações', path: '/settings' },
 ];
 
-export function Sidebar() {
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
 
   return (
-    <aside 
-      className={cn(
-        "fixed left-0 top-0 h-screen bg-sidebar flex flex-col transition-all duration-300 z-50",
-        collapsed ? "w-20" : "w-64"
-      )}
-    >
+    <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-6 border-b border-sidebar-border">
         <div className="w-10 h-10 rounded-xl gradient-primary flex items-center justify-center shadow-glow">
           <Droplets className="w-6 h-6 text-sidebar-primary-foreground" />
         </div>
-        {!collapsed && (
-          <div className="animate-fade-in">
-            <h1 className="text-lg font-bold text-sidebar-foreground">FlowDrain</h1>
-            <p className="text-xs text-sidebar-foreground/60">Scout</p>
-          </div>
-        )}
+        <div>
+          <h1 className="text-lg font-bold text-sidebar-foreground">FlowDrain</h1>
+          <p className="text-xs text-sidebar-foreground/60">Scout</p>
+        </div>
       </div>
 
       {/* Navigation */}
@@ -55,6 +50,7 @@ export function Sidebar() {
             <Link
               key={item.path}
               to={item.path}
+              onClick={onNavigate}
               className={cn(
                 "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group",
                 isActive 
@@ -66,9 +62,7 @@ export function Sidebar() {
                 "w-5 h-5 transition-transform group-hover:scale-110",
                 isActive && "animate-pulse-glow"
               )} />
-              {!collapsed && (
-                <span className="font-medium animate-fade-in">{item.label}</span>
-              )}
+              <span className="font-medium">{item.label}</span>
             </Link>
           );
         })}
@@ -78,24 +72,51 @@ export function Sidebar() {
       <div className="px-3 py-4 border-t border-sidebar-border">
         <Button
           variant="ghost"
-          className={cn(
-            "w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
-            collapsed && "justify-center"
-          )}
+          className="w-full justify-start text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
           onClick={() => {}}
         >
           <LogOut className="w-5 h-5" />
-          {!collapsed && <span className="ml-3">Sair</span>}
+          <span className="ml-3">Sair</span>
         </Button>
       </div>
+    </div>
+  );
+}
 
-      {/* Collapse Toggle */}
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-primary rounded-full flex items-center justify-center text-primary-foreground shadow-lg hover:scale-110 transition-transform"
-      >
-        <ChevronLeft className={cn("w-4 h-4 transition-transform", collapsed && "rotate-180")} />
-      </button>
+export function Sidebar() {
+  const isMobile = useIsMobile();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const location = useLocation();
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location.pathname]);
+
+  if (isMobile) {
+    return (
+      <>
+        {/* Mobile hamburger button - positioned in header area */}
+        <button
+          onClick={() => setMobileOpen(true)}
+          className="fixed top-4 left-4 z-50 w-10 h-10 rounded-lg bg-sidebar flex items-center justify-center shadow-lg"
+          aria-label="Abrir menu"
+        >
+          <Menu className="w-5 h-5 text-sidebar-foreground" />
+        </button>
+
+        <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+          <SheetContent side="left" className="w-64 p-0 bg-sidebar border-sidebar-border">
+            <SidebarContent onNavigate={() => setMobileOpen(false)} />
+          </SheetContent>
+        </Sheet>
+      </>
+    );
+  }
+
+  return (
+    <aside className="fixed left-0 top-0 h-screen w-64 bg-sidebar flex flex-col z-50">
+      <SidebarContent />
     </aside>
   );
 }

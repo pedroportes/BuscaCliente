@@ -47,17 +47,17 @@ export default function Settings() {
     <AppLayout title="Configurações" subtitle="Gerencie suas integrações e preferências">
       <Tabs defaultValue="integrations" className="space-y-6">
         <TabsList className="grid w-full max-w-md grid-cols-3">
-          <TabsTrigger value="integrations" className="gap-2">
+          <TabsTrigger value="integrations" className="gap-1 md:gap-2 text-xs md:text-sm">
             <Key className="w-4 h-4" />
-            Integrações
+            <span className="hidden sm:inline">Integrações</span>
           </TabsTrigger>
-          <TabsTrigger value="profile" className="gap-2">
+          <TabsTrigger value="profile" className="gap-1 md:gap-2 text-xs md:text-sm">
             <User className="w-4 h-4" />
-            Perfil
+            <span className="hidden sm:inline">Perfil</span>
           </TabsTrigger>
-          <TabsTrigger value="notifications" className="gap-2">
+          <TabsTrigger value="notifications" className="gap-1 md:gap-2 text-xs md:text-sm">
             <Bell className="w-4 h-4" />
-            Notificações
+            <span className="hidden sm:inline">Notificações</span>
           </TabsTrigger>
         </TabsList>
 
