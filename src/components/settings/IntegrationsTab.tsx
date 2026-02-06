@@ -46,6 +46,7 @@ const integrationConfigs: ApiIntegrationConfig[] = [
     description: 'Geração de copy com IA',
     keyName: 'GOOGLE_GEMINI_API_KEY',
     icon: <div className="p-2 rounded-lg bg-purple-500/10"><span className="text-purple-500 text-lg">✨</span></div>,
+    isServerSecret: true,
   },
   {
     id: 'resend',
