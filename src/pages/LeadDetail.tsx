@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -26,6 +26,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
 const stageConfig: Record<string, { label: string; className: string }> = {
@@ -39,6 +40,7 @@ const stageConfig: Record<string, { label: string; className: string }> = {
 
 export default function LeadDetail() {
   const { id } = useParams();
+  const { toast } = useToast();
   const [generatedCopy, setGeneratedCopy] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [newNote, setNewNote] = useState('');
@@ -66,28 +68,50 @@ export default function LeadDetail() {
     return 'text-muted-foreground bg-muted border-border';
   };
 
-  const handleGenerateCopy = () => {
+  const handleGenerateCopy = useCallback(async () => {
     if (!lead) return;
     setIsGenerating(true);
-    // Mock AI generation - TODO: Conectar com IA real via Edge Function
-    setTimeout(() => {
-      setGeneratedCopy(`[EXEMPLO - Mensagem fictícia para demonstração]
+    setGeneratedCopy('');
 
-Olá! Somos o FlowDrain, a solução completa para gestão de desentupidoras.
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-copy', {
+        body: {
+          lead: {
+            business_name: lead.business_name,
+            city: lead.city,
+            state: lead.state,
+            rating: lead.rating,
+            total_reviews: lead.total_reviews,
+            category: lead.category,
+            website_url: lead.website_url,
+            has_whatsapp: lead.has_whatsapp,
+          },
+        },
+      });
 
-Notamos que a ${lead.business_name} tem excelente reputação em ${lead.city || 'sua região'}, com ${lead.total_reviews || 0} avaliações positivas! 
+      if (error) throw error;
 
-Queremos ajudar vocês a crescer ainda mais com:
-✅ Agendamento de serviços automatizado
-✅ Controle de ordens de serviço
-✅ CRM para clientes
+      if (data?.error) {
+        toast({
+          title: 'Erro ao gerar copy',
+          description: data.error,
+          variant: 'destructive',
+        });
+        return;
+      }
 
-Que tal uma demonstração gratuita de 15 minutos?
-
-⚠️ Esta mensagem é um exemplo. Conecte uma IA real para gerar copies personalizadas.`);
+      setGeneratedCopy(data?.copy || 'Não foi possível gerar a mensagem.');
+    } catch (err: any) {
+      console.error('Error generating copy:', err);
+      toast({
+        title: 'Erro ao gerar copy',
+        description: err.message || 'Tente novamente mais tarde.',
+        variant: 'destructive',
+      });
+    } finally {
       setIsGenerating(false);
-    }, 2000);
-  };
+    }
+  }, [lead, toast]);
 
   if (isLoading) {
     return (
