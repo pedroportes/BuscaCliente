@@ -72,7 +72,7 @@ export default function Engagement() {
       <EngagementMetrics />
 
       {/* Main Content - Chat Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-4 h-[calc(100vh-240px)] min-h-[400px]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 mt-4 lg:h-[calc(100vh-240px)] min-h-[300px]">
         {/* Leads List - Left Sidebar */}
         <div className="lg:col-span-4 xl:col-span-4">
           <Card className="h-full bg-card border-0 shadow-sm flex flex-col overflow-hidden">

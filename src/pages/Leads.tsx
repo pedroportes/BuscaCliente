@@ -109,9 +109,9 @@ export default function Leads() {
       title="Leads" 
       subtitle={`${filteredLeads.length} leads encontrados`}
     >
-      <div className="flex gap-6">
-        {/* Filters Sidebar */}
-        <Card className="w-72 p-5 bg-card border-0 shadow-md h-fit sticky top-24 flex-shrink-0">
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Filters Sidebar - collapsible on mobile */}
+        <Card className="w-full lg:w-72 p-5 bg-card border-0 shadow-md h-fit lg:sticky lg:top-24 flex-shrink-0">
           <div className="flex items-center gap-2 mb-6">
             <Filter className="w-5 h-5 text-primary" />
             <h3 className="font-semibold text-card-foreground">Filtros</h3>
@@ -202,8 +202,8 @@ export default function Leads() {
         {/* Main Content */}
         <div className="flex-1 space-y-4">
           {/* Header Actions */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="relative flex-1 max-w-md">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="relative w-full sm:flex-1 sm:max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input 
                 placeholder="Buscar por nome ou cidade..." 
@@ -219,9 +219,9 @@ export default function Leads() {
                   {selectedLeads.length} selecionados
                 </Badge>
               )}
-              <Button variant="outline" className="gap-2">
+              <Button variant="outline" className="gap-2" size="sm">
                 <Download className="w-4 h-4" />
-                Exportar CSV
+                <span className="hidden sm:inline">Exportar CSV</span>
               </Button>
             </div>
           </div>
@@ -349,11 +349,11 @@ export default function Leads() {
             </div>
 
             {/* Pagination */}
-            <div className="flex items-center justify-between px-4 py-3 border-t border-border">
+            <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 border-t border-border gap-3">
               <p className="text-sm text-muted-foreground">
                 Mostrando {filteredLeads.length > 0 ? ((currentPage - 1) * leadsPerPage) + 1 : 0} a {Math.min(currentPage * leadsPerPage, filteredLeads.length)} de {filteredLeads.length}
               </p>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
                 <Button 
                   variant="outline" 
                   size="sm"
@@ -362,7 +362,7 @@ export default function Leads() {
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => i + 1).map(page => (
+                {Array.from({ length: Math.min(3, totalPages) }, (_, i) => i + 1).map(page => (
                   <Button
                     key={page}
                     variant={currentPage === page ? "default" : "outline"}
