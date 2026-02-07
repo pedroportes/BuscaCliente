@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,11 +9,11 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
-import { 
-  Play, 
-  Loader2, 
-  CheckCircle2, 
-  XCircle, 
+import {
+  Play,
+  Loader2,
+  CheckCircle2,
+  XCircle,
   AlertTriangle,
   Globe,
   MapPin,
@@ -21,6 +22,8 @@ import {
   Users
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
+import { useProfile } from '@/hooks/useProfile';
+
 
 interface WebhookResponse {
   success?: boolean;
@@ -40,14 +43,21 @@ interface WebhookResponse {
 
 export default function WebhookTest() {
   const { toast } = useToast();
-  
+
   const [webhookUrl, setWebhookUrl] = useState('https://novon8n.hidrocuritiba.com.br/webhook-test/google-maps-scraper');
   const [campaignId, setCampaignId] = useState('test-campaign-001');
-  const [companyId, setCompanyId] = useState('00000000-0000-0000-0000-000000000001');
+  const [companyId, setCompanyId] = useState('');
+  const { companyId: profileCompanyId } = useProfile();
+
+  useEffect(() => {
+    if (profileCompanyId) {
+      setCompanyId(profileCompanyId);
+    }
+  }, [profileCompanyId]);
   const [searchLocation, setSearchLocation] = useState('Curitiba, PR');
   const [searchNiches, setSearchNiches] = useState('desentupidora, encanador');
   const [radiusKm, setRadiusKm] = useState('20');
-  
+
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<WebhookResponse | null>(null);
   const [rawResponse, setRawResponse] = useState<string>('');
@@ -130,12 +140,12 @@ export default function WebhookTest() {
     } catch (err) {
       const elapsed = Date.now() - startTime;
       setRequestTime(elapsed);
-      
+
       const errorMessage = err instanceof Error ? err.message : 'Erro desconhecido';
       setError(errorMessage);
-      
+
       console.error('[WebhookTest] Erro:', err);
-      
+
       toast({
         title: 'Erro ao chamar webhook',
         description: errorMessage,
@@ -234,8 +244,8 @@ export default function WebhookTest() {
               />
             </div>
 
-            <Button 
-              onClick={handleTestWebhook} 
+            <Button
+              onClick={handleTestWebhook}
               disabled={isLoading || !webhookUrl}
               className="w-full"
               size="lg"

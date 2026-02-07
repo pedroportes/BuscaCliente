@@ -21,8 +21,8 @@ interface ScrapingProgressModalProps {
   onComplete: (leadsCount: number) => void;
 }
 
-export function ScrapingProgressModal({ 
-  open, location, niches, campaignId, companyId, onComplete 
+export function ScrapingProgressModal({
+  open, location, niches, campaignId, companyId, onComplete
 }: ScrapingProgressModalProps) {
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [totalLeads, setTotalLeads] = useState(0);
@@ -69,7 +69,8 @@ export function ScrapingProgressModal({
         }
 
         if (!data?.success && data?.error) {
-          throw new Error(data.error);
+          const detailMsg = data.details ? ` (${data.details})` : '';
+          throw new Error(`${data.error}${detailMsg}`);
         }
 
         // Step 1 complete
@@ -98,7 +99,7 @@ export function ScrapingProgressModal({
         const msg = err instanceof Error ? err.message : 'Erro desconhecido';
         console.error('[ScrapingModal] Error:', msg);
         setErrorMessage(msg);
-        setSteps(prev => prev.map((s, i) => 
+        setSteps(prev => prev.map((s, i) =>
           i === currentStepIndex ? { ...s, status: 'error' } : s
         ));
       }
@@ -110,9 +111,9 @@ export function ScrapingProgressModal({
   const progress = steps.filter(s => s.status === 'completed').length / steps.length * 100;
 
   return (
-    <Dialog open={open} onOpenChange={() => {}}>
-      <DialogContent 
-        className="sm:max-w-lg" 
+    <Dialog open={open} onOpenChange={() => { }}>
+      <DialogContent
+        className="sm:max-w-lg"
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
@@ -130,9 +131,9 @@ export function ScrapingProgressModal({
               const isActive = step.status === 'running';
               const isCompleted = step.status === 'completed';
               const isError = step.status === 'error';
-              
+
               return (
-                <div 
+                <div
                   key={step.id}
                   className={cn(
                     "flex items-center gap-3 p-3 rounded-lg transition-all",

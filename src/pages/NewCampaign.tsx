@@ -23,6 +23,9 @@ import {
 } from '@/components/ui/form';
 import { ScrapingProgressModal } from '@/components/campaign/ScrapingProgressModal';
 import { cn } from '@/lib/utils';
+import { useProfile } from '@/hooks/useProfile';
+import { useToast } from '@/hooks/use-toast';
+
 
 const niches = [
   { id: 'desentupidora', label: 'Desentupidora' },
@@ -53,6 +56,8 @@ export default function NewCampaign() {
   const [currentStep, setCurrentStep] = useState(1);
   const [isSearching, setIsSearching] = useState(false);
   const [campaignId, setCampaignId] = useState<string | undefined>();
+  const { companyId } = useProfile();
+  const { toast } = useToast();
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -68,8 +73,8 @@ export default function NewCampaign() {
   const watchedValues = form.watch();
 
   const canProceedToStep2 = watchedValues.name?.length >= 3;
-  const canProceedToStep3 = 
-    watchedValues.location?.length >= 3 && 
+  const canProceedToStep3 =
+    watchedValues.location?.length >= 3 &&
     watchedValues.niches?.length >= 1;
 
   const handleNext = () => {
@@ -86,10 +91,24 @@ export default function NewCampaign() {
 
   const handleScrapingComplete = (leadsCount: number) => {
     console.log(`Scraping completed with ${leadsCount} leads`);
-    navigate('/leads');
+    if (campaignId) {
+      navigate(`/leads?campaign=${campaignId}`);
+    } else {
+      navigate('/leads');
+    }
   };
 
   const handleStartSearch = async () => {
+    if (!companyId) {
+      console.error('Company ID not found');
+      toast({
+        title: 'Erro ao criar campanha',
+        description: 'Não foi possível identificar sua empresa. Verifique se você está logado corretamente.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     // Create campaign in Supabase first
     try {
       const { data: campaignData, error: campaignError } = await supabase
@@ -100,21 +119,31 @@ export default function NewCampaign() {
           search_niches: watchedValues.niches || [],
           status: 'running',
           started_at: new Date().toISOString(),
-          company_id: '00000000-0000-0000-0000-000000000001',
+          company_id: companyId,
         })
         .select('id')
         .single();
 
       if (campaignError) {
         console.error('Error creating campaign:', campaignError);
-      } else {
-        setCampaignId(campaignData.id);
+        toast({
+          title: 'Erro ao criar campanha',
+          description: campaignError.message,
+          variant: 'destructive',
+        });
+        return; // Interrompe se houver erro
       }
+
+      setCampaignId(campaignData.id);
+      setIsSearching(true);
     } catch (err) {
       console.error('Error creating campaign:', err);
+      toast({
+        title: 'Erro inesperado',
+        description: 'Ocorreu um erro ao preparar sua campanha.',
+        variant: 'destructive',
+      });
     }
-
-    setIsSearching(true);
   };
 
   return (
@@ -132,8 +161,8 @@ export default function NewCampaign() {
                       currentStep > step.id
                         ? "bg-primary text-primary-foreground"
                         : currentStep === step.id
-                        ? "bg-primary text-primary-foreground ring-4 ring-primary/20"
-                        : "bg-muted text-muted-foreground"
+                          ? "bg-primary text-primary-foreground ring-4 ring-primary/20"
+                          : "bg-muted text-muted-foreground"
                     )}
                   >
                     {currentStep > step.id ? (
@@ -410,7 +439,9 @@ export default function NewCampaign() {
                   <div className="pt-4 border-t">
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Estimativa de leads</span>
-                      <span className="text-2xl font-bold text-primary">~50 leads</span>
+                      <span className="text-2xl font-bold text-primary">
+                        ~{Math.floor((watchedValues.niches?.length || 0) * (10 + (watchedValues.radius || 20) / 2))} leads
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -431,12 +462,12 @@ export default function NewCampaign() {
       </div>
 
       {/* Scraping Progress Modal */}
-      <ScrapingProgressModal 
+      <ScrapingProgressModal
         open={isSearching}
         location={watchedValues.location || ''}
         niches={watchedValues.niches || []}
         campaignId={campaignId}
-        companyId="00000000-0000-0000-0000-000000000001"
+        companyId={companyId || ''}
         onComplete={handleScrapingComplete}
       />
     </AppLayout>
