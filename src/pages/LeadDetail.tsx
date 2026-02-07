@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Card } from '@/components/ui/card';
@@ -29,7 +29,11 @@ import {
   User,
   Calendar,
   Loader2,
-  Zap
+  Zap,
+  Edit2,
+  Check,
+  X,
+  Save
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -55,7 +59,15 @@ export default function LeadDetail() {
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailSubject, setEmailSubject] = useState('');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  /* New edit states */
   const [isEnriching, setIsEnriching] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedLead, setEditedLead] = useState<any>({});
+
+  /* Copy Generator State */
+  const [copyChannel, setCopyChannel] = useState<'whatsapp' | 'email'>('whatsapp');
+
+
 
   const { data: lead, isLoading } = useQuery({
     queryKey: ['lead', id],
@@ -71,8 +83,60 @@ export default function LeadDetail() {
     },
     enabled: !!id,
   });
-
   const [stage, setStage] = useState<string>(lead?.stage || 'new');
+
+  // Initialize edit state when lead data loads
+  useCallback(() => {
+    if (lead) {
+      setEditedLead(lead);
+    }
+  }, [lead]);
+
+  // Effect to update editedLead when lead changes
+  if (lead && !editedLead.id) {
+    setEditedLead(lead);
+  }
+
+  const handleSaveLead = async () => {
+    if (!lead) return;
+
+    try {
+      const { error } = await supabase
+        .from('leads')
+        .update({
+          business_name: editedLead.business_name,
+          phone: editedLead.phone,
+          email: editedLead.email,
+          website_url: editedLead.website_url,
+          city: editedLead.city,
+          state: editedLead.state,
+        })
+        .eq('id', lead.id);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Lead atualizado!',
+        description: 'As alterações foram salvas com sucesso.',
+      });
+      setIsEditing(false);
+      // Force refresh data
+      window.location.reload();
+    } catch (error: any) {
+      console.error('Error updating lead:', error);
+      toast({
+        title: 'Erro ao atualizar',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const cancelEdit = () => {
+    setEditedLead(lead);
+    setIsEditing(false);
+  };
+
 
   const getScoreColor = (score: number) => {
     if (score >= 70) return 'text-success bg-success/10 border-success/20';
@@ -98,6 +162,7 @@ export default function LeadDetail() {
             website_url: lead.website_url,
             has_whatsapp: lead.has_whatsapp,
           },
+          channel: copyChannel
         },
       });
 
@@ -123,7 +188,7 @@ export default function LeadDetail() {
     } finally {
       setIsGenerating(false);
     }
-  }, [lead, toast]);
+  }, [lead, toast, copyChannel]);
 
   const handleSendWhatsApp = async () => {
     if (!lead?.phone || !generatedCopy) return;
@@ -230,15 +295,13 @@ export default function LeadDetail() {
       console.error('Erro ao enviar email via API:', apiError);
 
       toast({
-        title: 'Falha no envio automático',
-        description: 'Abrindo cliente de email padrão como fallback...',
-        variant: 'destructive',
+        title: "Envio automático não realizado",
+        description: "Provável limitação do plano gratuito (verifique se está enviando para seu próprio email). Abrindo cliente externo...",
+        variant: "destructive",
       });
 
-      // Fallback para Gmail
       const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(generatedCopy)}`;
       window.open(gmailUrl, '_blank');
-
       setEmailDialogOpen(false);
     } finally {
       setIsSendingEmail(false);
@@ -288,15 +351,28 @@ export default function LeadDetail() {
           {/* Header Card */}
           <Card className="p-4 md:p-6 bg-card border-0 shadow-md">
             <div className="flex flex-col sm:flex-row items-start justify-between gap-4 mb-6">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-4 flex-1">
                 <div className={cn(
-                  "w-16 h-16 rounded-2xl flex items-center justify-center font-bold text-2xl border-2",
+                  "w-16 h-16 rounded-2xl flex items-center justify-center font-bold text-2xl border-2 shrink-0",
                   getScoreColor(lead.lead_score || 0)
                 )}>
                   {lead.lead_score || 0}
                 </div>
-                <div>
-                  <h2 className="text-xl font-bold text-card-foreground">{lead.business_name}</h2>
+                <div className="flex-1 min-w-0">
+                  {isEditing ? (
+                    <div className="flex-1 space-y-2 mb-2">
+                      <Label htmlFor="business_name">Nome da Empresa</Label>
+                      <Input
+                        id="business_name"
+                        value={editedLead.business_name || ''}
+                        onChange={(e) => setEditedLead({ ...editedLead, business_name: e.target.value })}
+                        className="text-xl font-bold h-auto py-2"
+                      />
+                    </div>
+                  ) : (
+                    <h2 className="text-xl font-bold text-card-foreground truncate">{lead.business_name}</h2>
+                  )}
+
                   <div className="flex items-center gap-2 mt-1">
                     <Star className="w-4 h-4 fill-warning text-warning" />
                     <span className="font-medium">{lead.rating || '-'}</span>
@@ -305,114 +381,138 @@ export default function LeadDetail() {
                 </div>
               </div>
 
-              <Select value={currentStage} onValueChange={setStage}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(stageConfig).map(([key, config]) => (
-                    <SelectItem key={key} value={key}>
-                      <span className={cn("px-2 py-0.5 rounded", config.className)}>
-                        {config.label}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2 self-start sm:self-center">
+                {!isEditing ? (
+                  <Button variant="outline" size="sm" onClick={() => { setEditedLead(lead); setIsEditing(true); }} className="gap-2">
+                    <Edit2 className="w-4 h-4" /> Edit
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={cancelEdit}>
+                      <X className="w-4 h-4 text-destructive" />
+                    </Button>
+                    <Button variant="default" size="sm" onClick={handleSaveLead}>
+                      <Save className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+                <Select value={currentStage} onValueChange={setStage}>
+                  <SelectTrigger className="w-32 sm:w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(stageConfig).map(([key, config]) => (
+                      <SelectItem key={key} value={key}>
+                        <span className={cn("px-2 py-0.5 rounded", config.className)}>
+                          {config.label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             {/* Contact Info Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {lead.phone && (
-                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl">
-                  <Phone className="w-5 h-5 text-primary" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Telefone</p>
-                    <p className="font-medium text-card-foreground">{lead.phone}</p>
-                  </div>
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl">
+                <Phone className="w-5 h-5 text-primary" />
+                <div className="flex-1 w-full min-w-0">
+                  <p className="text-xs text-muted-foreground">Telefone</p>
+                  {isEditing ? (
+                    <Input
+                      value={editedLead.phone || ''}
+                      onChange={(e) => setEditedLead({ ...editedLead, phone: e.target.value })}
+                      className="h-8 mt-1 text-sm"
+                    />
+                  ) : (
+                    <p className="font-medium text-card-foreground truncate">{lead.phone || '-'}</p>
+                  )}
                 </div>
-              )}
-              {lead.email && (
-                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl">
-                  <Mail className="w-5 h-5 text-accent" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Email</p>
-                    <p className="font-medium text-card-foreground truncate">{lead.email}</p>
-                  </div>
+              </div>
+
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl">
+                <Mail className="w-5 h-5 text-accent" />
+                <div className="flex-1 w-full min-w-0">
+                  <p className="text-xs text-muted-foreground">Email</p>
+                  {isEditing ? (
+                    <Input
+                      value={editedLead.email || ''}
+                      onChange={(e) => setEditedLead({ ...editedLead, email: e.target.value })}
+                      className="h-8 mt-1 text-sm"
+                    />
+                  ) : (
+                    <p className="font-medium text-card-foreground truncate">{lead.email || '-'}</p>
+                  )}
                 </div>
-              )}
+              </div>
+
               <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl">
                 <MapPin className="w-5 h-5 text-destructive" />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-muted-foreground">Localização</p>
-                  {lead.google_maps_url ? (
-                    <a
-                      href={lead.google_maps_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-primary hover:underline flex items-center gap-1"
-                    >
-                      {lead.city || '-'}, {lead.state || '-'}
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  ) : lead.full_address ? (
-                    <a
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lead.full_address)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-medium text-primary hover:underline flex items-center gap-1"
-                    >
-                      {lead.city || '-'}, {lead.state || '-'}
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+                  {isEditing ? (
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        value={editedLead.city || ''}
+                        onChange={(e) => setEditedLead({ ...editedLead, city: e.target.value })}
+                        placeholder="Cidade"
+                        className="h-8 text-sm flex-1"
+                      />
+                      <Input
+                        value={editedLead.state || ''}
+                        onChange={(e) => setEditedLead({ ...editedLead, state: e.target.value })}
+                        placeholder="UF"
+                        className="h-8 text-sm w-16"
+                      />
+                    </div>
                   ) : (
                     <p className="font-medium text-card-foreground">{lead.city || '-'}, {lead.state || '-'}</p>
                   )}
                 </div>
               </div>
-              {lead.website_url && (
-                <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl">
-                  <Globe className="w-5 h-5 text-success" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-muted-foreground">Website</p>
-                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <a href={lead.website_url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline flex items-center gap-1 truncate">
-                        Visitar site <ExternalLink className="w-3 h-3" />
-                      </a>
 
-                      {(lead.instagram_url || lead.facebook_url) && (
-                        <div className="hidden sm:block h-4 w-px bg-border my-auto" />
-                      )}
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-xl">
+                <Globe className="w-5 h-5 text-success" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground">Website</p>
+                  {isEditing ? (
+                    <Input
+                      value={editedLead.website_url || ''}
+                      onChange={(e) => setEditedLead({ ...editedLead, website_url: e.target.value })}
+                      className="h-8 mt-1 text-sm"
+                      placeholder="https://..."
+                    />
+                  ) : (
+                    lead.website_url ? (
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <a href={lead.website_url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline flex items-center gap-1 truncate">
+                          Visitar site <ExternalLink className="w-3 h-3" />
+                        </a>
 
-                      <div className="flex items-center gap-1">
-                        {lead.instagram_url && (
-                          <a
-                            href={lead.instagram_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-pink-600 hover:text-pink-700 hover:bg-pink-50 p-1 rounded-md transition-colors"
-                            title="Instagram"
-                          >
-                            <Instagram className="w-4 h-4" />
-                          </a>
+                        {(lead.instagram_url || lead.facebook_url) && (
+                          <div className="hidden sm:block h-4 w-px bg-border my-auto" />
                         )}
 
-                        {lead.facebook_url && (
-                          <a
-                            href={lead.facebook_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 p-1 rounded-md transition-colors"
-                            title="Facebook"
-                          >
-                            <Facebook className="w-4 h-4" />
-                          </a>
-                        )}
+                        <div className="flex items-center gap-1">
+                          {lead.instagram_url && (
+                            <a href={lead.instagram_url} target="_blank" rel="noopener noreferrer" className="text-pink-600 hover:text-pink-700 hover:bg-pink-50 p-1 rounded-md transition-colors">
+                              <Instagram className="w-4 h-4" />
+                            </a>
+                          )}
+                          {lead.facebook_url && (
+                            <a href={lead.facebook_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 p-1 rounded-md transition-colors">
+                              <Facebook className="w-4 h-4" />
+                            </a>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    ) : (
+                      <span className="text-muted-foreground text-sm">-</span>
+                    )
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </Card>
 
@@ -496,7 +596,26 @@ export default function LeadDetail() {
                         <Sparkles className="w-5 h-5 text-primary" />
                         Gerador de Copy com IA
                       </h3>
-                      <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                      <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-center">
+                        <div className="flex bg-muted p-1 rounded-lg">
+                          <Button
+                            variant={copyChannel === 'whatsapp' ? 'default' : 'ghost'}
+                            size="sm"
+                            onClick={() => setCopyChannel('whatsapp')}
+                            className="h-7 text-xs px-3 shadow-none hover:bg-muted-foreground/10"
+                          >
+                            WhatsApp
+                          </Button>
+                          <Button
+                            variant={copyChannel === 'email' ? 'default' : 'ghost'}
+                            size="sm"
+                            onClick={() => setCopyChannel('email')}
+                            className="h-7 text-xs px-3 shadow-none hover:bg-muted-foreground/10"
+                          >
+                            Email
+                          </Button>
+                        </div>
+
                         <Button
                           onClick={handleEnrichLead}
                           disabled={isEnriching}
@@ -526,7 +645,7 @@ export default function LeadDetail() {
                               Gerando...
                             </span>
                           ) : (
-                            'Gerar Mensagem'
+                            `Gerar ${copyChannel === 'whatsapp' ? 'WhatsApp' : 'Email'}`
                           )}
                         </Button>
                       </div>
