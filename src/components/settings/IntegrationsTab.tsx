@@ -4,10 +4,10 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Check, 
-  X, 
-  Eye, 
+import {
+  Check,
+  X,
+  Eye,
   EyeOff,
   TestTube,
   Loader2,
@@ -54,7 +54,7 @@ const integrationConfigs: ApiIntegrationConfig[] = [
     description: 'Envio de emails transacionais',
     keyName: 'RESEND_API_KEY',
     icon: <div className="p-2 rounded-lg bg-teal-500/10"><Mail className="w-5 h-5 text-teal-500" /></div>,
-    isServerSecret: true,
+    isServerSecret: false,
   },
 ];
 
@@ -201,7 +201,7 @@ export function IntegrationsTab() {
                   Configurado (Server)
                 </Badge>
               ) : (
-                <Badge 
+                <Badge
                   variant={connectedMap[integration.id] ? "default" : "secondary"}
                   className={connectedMap[integration.id] ? "bg-success" : ""}
                 >

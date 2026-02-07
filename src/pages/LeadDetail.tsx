@@ -11,13 +11,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { 
-  ArrowLeft, 
-  Star, 
-  Globe, 
-  Phone, 
-  Mail, 
+import {
+  ArrowLeft,
+  Star,
+  Globe,
+  Phone,
+  Mail,
   MessageCircle,
+  Instagram,
+  Facebook,
   MapPin,
   Clock,
   ExternalLink,
@@ -26,7 +28,8 @@ import {
   Plus,
   User,
   Calendar,
-  Loader2
+  Loader2,
+  Zap
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -44,12 +47,15 @@ const stageConfig: Record<string, { label: string; className: string }> = {
 export default function LeadDetail() {
   const { id } = useParams();
   const { toast } = useToast();
+  const [whatsappMethod, setWhatsappMethod] = useState<'app' | 'api'>('app');
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
   const [generatedCopy, setGeneratedCopy] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [newNote, setNewNote] = useState('');
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [emailSubject, setEmailSubject] = useState('');
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+  const [isEnriching, setIsEnriching] = useState(false);
 
   const { data: lead, isLoading } = useQuery({
     queryKey: ['lead', id],
@@ -119,6 +125,69 @@ export default function LeadDetail() {
     }
   }, [lead, toast]);
 
+  const handleSendWhatsApp = async () => {
+    if (!lead?.phone || !generatedCopy) return;
+
+    if (whatsappMethod === 'app') {
+      const phone = lead.phone.replace(/\D/g, '');
+      const url = `https://wa.me/55${phone}?text=${encodeURIComponent(generatedCopy)}`;
+      window.open(url, '_blank');
+      toast({
+        title: 'WhatsApp aberto!',
+        description: 'Continue o envio no aplicativo.',
+      });
+    } else {
+      // API fallback logic
+      toast({
+        title: 'Envio via API',
+        description: 'Funcionalidade em desenvolvimento. Use o envio pelo App por enquanto.',
+        variant: 'default',
+      });
+      console.log('API send requested', { phone: lead.phone, message: generatedCopy });
+    }
+  };
+
+
+
+  const handleEnrichLead = useCallback(async () => {
+    if (!lead) return;
+    setIsEnriching(true);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('enrich-lead', {
+        body: { lead_id: lead.id },
+      });
+
+      if (error) throw error;
+
+      if (data?.error) {
+        toast({
+          title: 'Erro ao enriquecer lead',
+          description: data.error,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      toast({
+        title: 'Lead enriquecido!',
+        description: 'Dados do lead atualizados com sucesso.',
+      });
+
+      // Reload the page to see updated data
+      window.location.reload();
+    } catch (err: any) {
+      console.error('Error enriching lead:', err);
+      toast({
+        title: 'Erro ao enriquecer lead',
+        description: err.message || 'Tente novamente mais tarde.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsEnriching(false);
+    }
+  }, [lead, toast]);
+
   const handleOpenEmailDialog = () => {
     if (!lead?.email) {
       toast({
@@ -134,42 +203,43 @@ export default function LeadDetail() {
 
   const handleSendEmail = useCallback(async () => {
     if (!lead?.email || !generatedCopy || !emailSubject) return;
-    setIsSendingEmail(true);
 
+    setIsSendingEmail(true);
     try {
+      // Tentar envio via API primeiro
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           to: lead.email,
           subject: emailSubject,
           body: generatedCopy,
           leadId: lead.id,
-          leadName: lead.business_name,
-        },
+          leadName: lead.business_name
+        }
       });
 
       if (error) throw error;
-
-      if (data?.error) {
-        toast({
-          title: 'Erro ao enviar email',
-          description: data.error,
-          variant: 'destructive',
-        });
-        return;
-      }
+      if (data?.error) throw new Error(data.error);
 
       toast({
-        title: 'Email enviado! ✉️',
-        description: `Email enviado para ${lead.email} com sucesso.`,
+        title: 'Email enviado com sucesso!',
+        description: 'O email foi enviado via Resend.',
+        variant: 'default',
       });
       setEmailDialogOpen(false);
-    } catch (err: any) {
-      console.error('Error sending email:', err);
+    } catch (apiError: any) {
+      console.error('Erro ao enviar email via API:', apiError);
+
       toast({
-        title: 'Erro ao enviar email',
-        description: err.message || 'Tente novamente mais tarde.',
+        title: 'Falha no envio automático',
+        description: 'Abrindo cliente de email padrão como fallback...',
         variant: 'destructive',
       });
+
+      // Fallback para Gmail
+      const gmailUrl = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(lead.email)}&su=${encodeURIComponent(emailSubject)}&body=${encodeURIComponent(generatedCopy)}`;
+      window.open(gmailUrl, '_blank');
+
+      setEmailDialogOpen(false);
     } finally {
       setIsSendingEmail(false);
     }
@@ -202,8 +272,8 @@ export default function LeadDetail() {
   const stageInfo = stageConfig[currentStage] || stageConfig.new;
 
   return (
-    <AppLayout 
-      title={lead.business_name} 
+    <AppLayout
+      title={lead.business_name}
       subtitle={`${lead.city || ''}, ${lead.state || ''}`}
     >
       {/* Back Button */}
@@ -276,20 +346,20 @@ export default function LeadDetail() {
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-muted-foreground">Localização</p>
                   {lead.google_maps_url ? (
-                    <a 
-                      href={lead.google_maps_url} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
+                    <a
+                      href={lead.google_maps_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="font-medium text-primary hover:underline flex items-center gap-1"
                     >
                       {lead.city || '-'}, {lead.state || '-'}
                       <ExternalLink className="w-3 h-3" />
                     </a>
                   ) : lead.full_address ? (
-                    <a 
-                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lead.full_address)}`} 
-                      target="_blank" 
-                      rel="noopener noreferrer" 
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lead.full_address)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="font-medium text-primary hover:underline flex items-center gap-1"
                     >
                       {lead.city || '-'}, {lead.state || '-'}
@@ -305,9 +375,41 @@ export default function LeadDetail() {
                   <Globe className="w-5 h-5 text-success" />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-muted-foreground">Website</p>
-                    <a href={lead.website_url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline flex items-center gap-1 truncate">
-                      Visitar site <ExternalLink className="w-3 h-3" />
-                    </a>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <a href={lead.website_url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline flex items-center gap-1 truncate">
+                        Visitar site <ExternalLink className="w-3 h-3" />
+                      </a>
+
+                      {(lead.instagram_url || lead.facebook_url) && (
+                        <div className="hidden sm:block h-4 w-px bg-border my-auto" />
+                      )}
+
+                      <div className="flex items-center gap-1">
+                        {lead.instagram_url && (
+                          <a
+                            href={lead.instagram_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-pink-600 hover:text-pink-700 hover:bg-pink-50 p-1 rounded-md transition-colors"
+                            title="Instagram"
+                          >
+                            <Instagram className="w-4 h-4" />
+                          </a>
+                        )}
+
+                        {lead.facebook_url && (
+                          <a
+                            href={lead.facebook_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 p-1 rounded-md transition-colors"
+                            title="Facebook"
+                          >
+                            <Facebook className="w-4 h-4" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -349,48 +451,132 @@ export default function LeadDetail() {
                         <p className="font-medium">{lead.has_whatsapp ? 'Disponível' : 'Não disponível'}</p>
                       </div>
                     </div>
+
+                    {lead.instagram_url && (
+                      <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-xl">
+                        <Instagram className="w-5 h-5 text-pink-500" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-muted-foreground">Instagram</p>
+                          <a
+                            href={lead.instagram_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium hover:underline truncate block text-primary"
+                          >
+                            Visitar perfil
+                          </a>
+                        </div>
+                      </div>
+                    )}
+
+                    {lead.facebook_url && (
+                      <div className="flex items-center gap-3 p-4 bg-muted/30 rounded-xl">
+                        <Facebook className="w-5 h-5 text-blue-600" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-muted-foreground">Facebook</p>
+                          <a
+                            href={lead.facebook_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-medium hover:underline truncate block text-primary"
+                          >
+                            Visitar perfil
+                          </a>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </TabsContent>
 
                 <TabsContent value="engagement" className="mt-0 space-y-6">
                   {/* AI Copy Generator */}
                   <div className="space-y-4">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                       <h3 className="font-semibold flex items-center gap-2">
                         <Sparkles className="w-5 h-5 text-primary" />
                         Gerador de Copy com IA
                       </h3>
-                      <Button 
-                        onClick={handleGenerateCopy}
-                        disabled={isGenerating}
-                        className="gradient-primary"
-                      >
-                        {isGenerating ? (
-                          <span className="flex items-center gap-2">
-                            <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                            Gerando...
-                          </span>
-                        ) : (
-                          'Gerar Mensagem'
-                        )}
-                      </Button>
+                      <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                        <Button
+                          onClick={handleEnrichLead}
+                          disabled={isEnriching}
+                          variant="outline"
+                          className="gap-2 flex-1 sm:flex-none"
+                        >
+                          {isEnriching ? (
+                            <span className="flex items-center gap-2">
+                              <span className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                              Enriquecendo...
+                            </span>
+                          ) : (
+                            <>
+                              <Zap className="w-4 h-4" />
+                              Enriquecer
+                            </>
+                          )}
+                        </Button>
+                        <Button
+                          onClick={handleGenerateCopy}
+                          disabled={isGenerating}
+                          className="gradient-primary flex-1 sm:flex-none"
+                        >
+                          {isGenerating ? (
+                            <span className="flex items-center gap-2">
+                              <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                              Gerando...
+                            </span>
+                          ) : (
+                            'Gerar Mensagem'
+                          )}
+                        </Button>
+                      </div>
                     </div>
-                    
-                    <Textarea 
+
+                    <Textarea
                       placeholder="Clique em 'Gerar Mensagem' para criar uma copy personalizada com IA..."
                       value={generatedCopy}
                       onChange={(e) => setGeneratedCopy(e.target.value)}
                       className="min-h-[200px]"
                     />
 
-                    <div className="flex gap-2">
-                      <Button variant="outline" className="flex-1 gap-2" disabled={!generatedCopy}>
-                        <MessageCircle className="w-4 h-4" />
-                        Enviar WhatsApp
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        className="flex-1 gap-2" 
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <div className="flex flex-1 gap-0">
+                        <Select value={whatsappMethod} onValueChange={(v: 'app' | 'api') => setWhatsappMethod(v)}>
+                          <SelectTrigger className="w-[100px] rounded-r-none border-r-0 focus:ring-1 focus:ring-primary focus:z-10 bg-muted/50">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="app">
+                              <span className="flex items-center gap-2">
+                                <MessageCircle className="w-4 h-4" /> App
+                              </span>
+                            </SelectItem>
+                            <SelectItem value="api">
+                              <span className="flex items-center gap-2">
+                                <Zap className="w-4 h-4" /> Evol.
+                              </span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+
+                        <Button
+                          className="flex-1 gap-2 rounded-l-none"
+                          disabled={!generatedCopy || isSendingWhatsApp}
+                          onClick={handleSendWhatsApp}
+                          variant={whatsappMethod === 'api' ? 'default' : 'outline'}
+                        >
+                          {isSendingWhatsApp ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Send className="w-4 h-4" />
+                          )}
+                          {whatsappMethod === 'api' ? 'Enviar' : 'Enviar'}
+                        </Button>
+                      </div>
+
+                      <Button
+                        variant="outline"
+                        className="flex-1 gap-2"
                         disabled={!generatedCopy}
                         onClick={handleOpenEmailDialog}
                       >
@@ -403,7 +589,7 @@ export default function LeadDetail() {
 
                 <TabsContent value="notes" className="mt-0 space-y-4">
                   <div className="flex gap-2">
-                    <Textarea 
+                    <Textarea
                       placeholder="Adicionar uma nota..."
                       value={newNote}
                       onChange={(e) => setNewNote(e.target.value)}
@@ -413,7 +599,7 @@ export default function LeadDetail() {
                       <Send className="w-4 h-4" />
                     </Button>
                   </div>
-                  
+
                   <div className="space-y-3">
                     <div className="text-center py-8 text-muted-foreground text-sm">
                       Nenhuma nota ainda. Adicione a primeira!
@@ -516,7 +702,7 @@ export default function LeadDetail() {
             <Button variant="outline" onClick={() => setEmailDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button 
+            <Button
               onClick={handleSendEmail}
               disabled={isSendingEmail || !emailSubject}
               className="gradient-primary gap-2"

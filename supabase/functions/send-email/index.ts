@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "npm:resend@2.0.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -21,15 +22,61 @@ serve(async (req) => {
   }
 
   try {
-    const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-    if (!RESEND_API_KEY) {
+    const { to, subject, body, leadId, leadName }: SendEmailRequest = await req.json();
+
+    let resendApiKey = Deno.env.get("RESEND_API_KEY");
+    let senderEmail = "onboarding@resend.dev";
+
+    // Tenta buscar configurações da empresa se leadId for fornecido
+    if (leadId) {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+        // 1. Busca company_id do lead
+        const { data: lead } = await supabase
+          .from("leads")
+          .select("company_id")
+          .eq("id", leadId)
+          .single();
+
+        if (lead?.company_id) {
+          // 2. Busca integração ativa do Resend
+          const { data: integration } = await supabase
+            .from("integrations")
+            .select("credentials, config")
+            .eq("company_id", lead.company_id)
+            .eq("provider", "resend")
+            .eq("is_active", true)
+            .maybeSingle();
+
+          if (integration) {
+            const creds = integration.credentials as Record<string, string>;
+            const config = integration.config as Record<string, string>;
+
+            if (creds?.api_key) {
+              resendApiKey = creds.api_key;
+              console.log("Usando API Key do banco de dados para Resend");
+            }
+            if (config?.sender_email) {
+              senderEmail = config.sender_email;
+              console.log(`Usando remetente personalizado: ${senderEmail}`);
+            }
+          }
+        }
+      } catch (dbError) {
+        console.error("Erro ao buscar configurações no banco:", dbError);
+        // Falha silenciosa, tenta usar env var padrão
+      }
+    }
+
+    if (!resendApiKey) {
       return new Response(
-        JSON.stringify({ error: "RESEND_API_KEY não está configurada. Configure em Configurações > Integrações." }),
+        JSON.stringify({ error: "RESEND_API_KEY não encontrada. Configure nas Integrações." }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const { to, subject, body, leadId, leadName }: SendEmailRequest = await req.json();
 
     // Validate inputs
     if (!to || !to.includes("@")) {
@@ -62,7 +109,7 @@ serve(async (req) => {
       .join("");
 
     const emailResponse = await resend.emails.send({
-      from: "FlowDrain <onboarding@resend.dev>",
+      from: `BuscaCliente <${senderEmail}>`,
       to: [to],
       subject: subject,
       html: `
@@ -70,11 +117,19 @@ serve(async (req) => {
           ${htmlBody}
           <hr style="margin-top: 30px; border: none; border-top: 1px solid #eee;" />
           <p style="font-size: 12px; color: #999;">
-            Enviado via FlowDrain • Gestão para Desentupidoras
+            Enviado via BuscaCliente • Gestão Inteligente para Especialistas
           </p>
         </div>
       `,
     });
+
+    if (emailResponse.error) {
+      console.error(`Resend error sending to ${to}:`, emailResponse.error);
+      return new Response(
+        JSON.stringify({ error: `Erro do provedor de email: ${emailResponse.error.message}` }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     console.log(`Email sent to ${to} for lead ${leadName} (${leadId}):`, emailResponse);
 

@@ -27,8 +27,8 @@ export function Header({ title, subtitle }: HeaderProps) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
-  const userEmail = user?.email || '';
-  const userName = user?.user_metadata?.full_name || userEmail.split('@')[0] || 'Usuário';
+  const userEmail = user?.email || 'pedrosportes@gmail.com';
+  const userName = user?.user_metadata?.full_name || 'Pedro Santos Portes';
   const userInitials = userName.slice(0, 2).toUpperCase();
 
   const handleLogout = async () => {
@@ -55,8 +55,8 @@ export function Header({ title, subtitle }: HeaderProps) {
           {/* Search - hidden on mobile */}
           <div className="relative hidden lg:block">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input 
-              placeholder="Buscar leads, campanhas..." 
+            <Input
+              placeholder="Buscar leads, campanhas..."
               className="w-64 pl-10 bg-muted/50 border-0 focus-visible:ring-primary"
             />
           </div>

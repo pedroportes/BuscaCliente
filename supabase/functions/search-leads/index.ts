@@ -91,11 +91,11 @@ serve(async (req) => {
 
     if (allPlaces.length === 0) {
       return new Response(
-        JSON.stringify({ 
-          success: true, 
-          leads_found: 0, 
+        JSON.stringify({
+          success: true,
+          leads_found: 0,
           leads_saved: 0,
-          message: 'Nenhum resultado encontrado para essa busca' 
+          message: 'Nenhum resultado encontrado para essa busca'
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
@@ -152,10 +152,9 @@ serve(async (req) => {
             .select('id')
             .eq('google_maps_url', lead.google_maps_url)
             .maybeSingle();
-          
+
           if (existing) {
             console.log(`[search-leads] Skipping duplicate: "${lead.business_name}"`);
-            savedCount++;
             continue;
           }
         }
