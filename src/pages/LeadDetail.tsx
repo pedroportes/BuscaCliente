@@ -467,7 +467,15 @@ export default function LeadDetail() {
                       />
                     </div>
                   ) : (
-                    <p className="font-medium text-card-foreground">{lead.city || '-'}, {lead.state || '-'}</p>
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${lead.city || ''}, ${lead.state || ''}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-primary hover:underline flex items-center gap-1"
+                    >
+                      {lead.city || '-'}, {lead.state || '-'}
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
                   )}
                 </div>
               </div>
