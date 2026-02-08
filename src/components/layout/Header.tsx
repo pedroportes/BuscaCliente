@@ -1,5 +1,4 @@
-import { Bell, Search, Coins, LogOut, User } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { Bell, Coins, LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -15,6 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useNavigate } from 'react-router-dom';
+import { IntegrationStatus } from '@/components/status/IntegrationStatus';
 
 interface HeaderProps {
   title: string;
@@ -52,14 +52,9 @@ export function Header({ title, subtitle }: HeaderProps) {
         </div>
 
         <div className="flex items-center gap-2 md:gap-4">
-          {/* Search - hidden on mobile */}
-          <div className="relative hidden lg:block">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar leads, campanhas..."
-              className="w-64 pl-10 bg-muted/50 border-0 focus-visible:ring-primary"
-            />
-          </div>
+
+          {/* Integration Status */}
+          <IntegrationStatus />
 
           {/* Credits */}
           <div className="flex items-center gap-1.5 px-2 md:px-3 py-1.5 bg-primary/10 rounded-full">

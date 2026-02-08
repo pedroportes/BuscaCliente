@@ -1,9 +1,9 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Users, 
-  Target, 
-  MessageSquare, 
+import {
+  LayoutDashboard,
+  Users,
+  Target,
+  MessageSquare,
   Settings,
   Droplets,
   LogOut,
@@ -12,16 +12,19 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { useState, useEffect } from 'react';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
+import { useLeadsCount } from '@/hooks/useLeads';
+import { useCampaigns } from '@/hooks/useCampaigns';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-  { icon: Users, label: 'Leads', path: '/leads' },
-  { icon: Target, label: 'Campanhas', path: '/campaigns' },
+  { icon: Users, label: 'Leads', path: '/leads', countKey: 'leads' as const },
+  { icon: Target, label: 'Campanhas', path: '/campaigns', countKey: 'campaigns' as const },
   { icon: MessageSquare, label: 'Engajamento', path: '/engagement' },
   { icon: Settings, label: 'Configurações', path: '/settings' },
 ];
@@ -30,6 +33,15 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { signOut } = useAuth();
+  const { data: leadsCount = 0 } = useLeadsCount();
+  const { data: campaigns = [] } = useCampaigns();
+
+  const getCounts = () => ({
+    leads: leadsCount,
+    campaigns: campaigns.length,
+  });
+
+  const counts = getCounts();
 
   const handleLogout = async () => {
     try {
@@ -57,9 +69,10 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       {/* Navigation */}
       <nav className="flex-1 px-3 py-6 space-y-1">
         {menuItems.map((item) => {
-          const isActive = location.pathname === item.path || 
+          const isActive = location.pathname === item.path ||
             (item.path !== '/dashboard' && location.pathname.startsWith(item.path));
-          
+          const count = item.countKey ? counts[item.countKey] : undefined;
+
           return (
             <Link
               key={item.path}
@@ -67,8 +80,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
               onClick={onNavigate}
               className={cn(
                 "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group",
-                isActive 
-                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md" 
+                isActive
+                  ? "bg-sidebar-primary text-sidebar-primary-foreground shadow-md"
                   : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
               )}
             >
@@ -76,7 +89,20 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
                 "w-5 h-5 transition-transform group-hover:scale-110",
                 isActive && "animate-pulse-glow"
               )} />
-              <span className="font-medium">{item.label}</span>
+              <span className="font-medium flex-1">{item.label}</span>
+              {count !== undefined && count > 0 && (
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "text-xs h-5 min-w-5 flex items-center justify-center",
+                    isActive
+                      ? "bg-white/20 text-white"
+                      : "bg-primary/10 text-primary"
+                  )}
+                >
+                  {count > 99 ? '99+' : count}
+                </Badge>
+              )}
             </Link>
           );
         })}

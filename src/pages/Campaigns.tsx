@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Plus, Search, MoreHorizontal, Play, Pause, Trash2, MapPin, Users, Loader2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Plus, Search, MoreHorizontal, Play, Pause, Trash2, MapPin, Users, Loader2, Megaphone } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +23,18 @@ import {
 import { useCampaigns, useCampaignStats, useDeleteCampaign } from '@/hooks/useCampaigns';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { EmptyState } from '@/components/ui/empty-state';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const statusConfig: Record<string, { label: string; color: string }> = {
   draft: { label: 'Rascunho', color: 'bg-muted text-muted-foreground' },
@@ -32,20 +44,31 @@ const statusConfig: Record<string, { label: string; color: string }> = {
 };
 
 export default function Campaigns() {
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [campaignToDelete, setCampaignToDelete] = useState<{ id: string; name: string } | null>(null);
   const { data: campaigns, isLoading } = useCampaigns();
   const { data: stats } = useCampaignStats();
   const deleteCampaign = useDeleteCampaign();
 
-  const handleDeleteCampaign = async (campaignId: string, campaignName: string) => {
-    if (!confirm(`Tem certeza que deseja excluir a campanha "${campaignName}"?`)) return;
-    
+  const openDeleteDialog = (campaignId: string, campaignName: string) => {
+    setCampaignToDelete({ id: campaignId, name: campaignName });
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteCampaign = async () => {
+    if (!campaignToDelete) return;
+
     try {
-      await deleteCampaign.mutateAsync(campaignId);
+      await deleteCampaign.mutateAsync(campaignToDelete.id);
       toast.success('Campanha excluída com sucesso!');
     } catch (error) {
       console.error('Delete campaign error:', error);
       toast.error('Erro ao excluir campanha. Tente novamente.');
+    } finally {
+      setDeleteDialogOpen(false);
+      setCampaignToDelete(null);
     }
   };
   const filteredCampaigns = (campaigns || []).filter((campaign) =>
@@ -141,31 +164,51 @@ export default function Campaigns() {
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8">
-                        <Loader2 className="w-6 h-6 animate-spin text-primary mx-auto" />
-                      </TableCell>
-                    </TableRow>
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <TableRow key={i} className="animate-pulse">
+                        <TableCell>
+                          <div className="space-y-1">
+                            <Skeleton className="h-4 w-32" />
+                            <Skeleton className="h-3 w-20" />
+                          </div>
+                        </TableCell>
+                        <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                        <TableCell><div className="flex gap-1"><Skeleton className="h-5 w-16 rounded-full" /><Skeleton className="h-5 w-16 rounded-full" /></div></TableCell>
+                        <TableCell className="text-center"><Skeleton className="h-4 w-8 mx-auto" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
+                        <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                        <TableCell><Skeleton className="h-6 w-6" /></TableCell>
+                      </TableRow>
+                    ))
                   ) : filteredCampaigns.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                        Nenhuma campanha encontrada
+                      <TableCell colSpan={7} className="py-0">
+                        <EmptyState
+                          icon={Megaphone}
+                          title="Nenhuma campanha encontrada"
+                          description={searchQuery
+                            ? "Tente ajustar sua busca"
+                            : "Crie sua primeira campanha para começar a buscar leads no Google Maps"}
+                          actionLabel={!searchQuery ? "Nova Campanha" : undefined}
+                          actionHref={!searchQuery ? "/campaigns/new" : undefined}
+                        />
                       </TableCell>
                     </TableRow>
                   ) : (
                     filteredCampaigns.map((campaign) => {
                       const status = campaign.status || 'draft';
                       const config = statusConfig[status] || statusConfig.draft;
-                      
+
                       return (
-                        <TableRow key={campaign.id} className="cursor-pointer hover:bg-muted/50">
+                        <TableRow
+                          key={campaign.id}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => navigate(`/leads?campaign=${campaign.id}`)}
+                        >
                           <TableCell>
-                            <Link 
-                              to={`/leads?campaign=${campaign.id}`}
-                              className="font-medium hover:text-primary transition-colors"
-                            >
+                            <span className="font-medium">
                               {campaign.name}
-                            </Link>
+                            </span>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1 text-muted-foreground">
@@ -206,7 +249,7 @@ export default function Campaigns() {
                           <TableCell className="text-muted-foreground">
                             {formatDate(campaign.created_at)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon">
@@ -231,9 +274,9 @@ export default function Campaigns() {
                                     Retomar
                                   </DropdownMenuItem>
                                 ) : null}
-                                <DropdownMenuItem 
+                                <DropdownMenuItem
                                   className="text-destructive"
-                                  onClick={() => handleDeleteCampaign(campaign.id, campaign.name)}
+                                  onClick={() => openDeleteDialog(campaign.id, campaign.name)}
                                 >
                                   <Trash2 className="h-4 w-4 mr-2" />
                                   Excluir
@@ -251,6 +294,28 @@ export default function Campaigns() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir campanha?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir a campanha <strong>"{campaignToDelete?.name}"</strong>?
+              Esta ação não pode ser desfeita e todos os leads associados também serão removidos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteCampaign}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

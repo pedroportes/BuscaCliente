@@ -3,6 +3,8 @@ import { MetricCard } from '@/components/dashboard/MetricCard';
 import { LeadsChart } from '@/components/dashboard/LeadsChart';
 import { CampaignsList } from '@/components/dashboard/CampaignsList';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
+import { OnboardingChecklist } from '@/components/dashboard/OnboardingChecklist';
+import { QuickActions } from '@/components/dashboard/QuickActions';
 import { Users, UserCheck, TrendingUp, Coins } from 'lucide-react';
 import { useLeadsCount, useQualifiedLeadsCount } from '@/hooks/useLeads';
 import { useCompanyCredits } from '@/hooks/useCompany';
@@ -12,15 +14,20 @@ export default function Dashboard() {
   const { data: qualifiedLeads = 0 } = useQualifiedLeadsCount();
   const { data: creditsRemaining = 0 } = useCompanyCredits();
 
-  const conversionRate = totalLeads > 0 
-    ? ((qualifiedLeads / totalLeads) * 100).toFixed(1) 
+  const conversionRate = totalLeads > 0
+    ? ((qualifiedLeads / totalLeads) * 100).toFixed(1)
     : '0';
 
   return (
-    <AppLayout 
-      title="Dashboard" 
+    <AppLayout
+      title="Dashboard"
       subtitle="Visão geral da sua prospecção"
     >
+      {/* Onboarding Checklist */}
+      <OnboardingChecklist />
+
+      {/* Quick Actions */}
+      <QuickActions />
       {/* Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <MetricCard

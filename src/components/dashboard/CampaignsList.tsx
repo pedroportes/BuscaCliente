@@ -5,6 +5,7 @@ import { Play, Pause, MoreVertical, Target, Loader2 } from 'lucide-react';
 import { useCampaigns } from '@/hooks/useCampaigns';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router-dom';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   draft: { label: 'Rascunho', className: 'bg-muted text-muted-foreground' },
@@ -88,9 +89,12 @@ export function CampaignsList() {
           })}
 
           {(!campaigns || campaigns.length === 0) && (
-            <div className="text-center py-8 text-muted-foreground">
-              Nenhuma campanha encontrada
-            </div>
+            <EmptyState
+              icon={Target}
+              title="Nenhuma campanha"
+              description="Crie sua primeira campanha para começar a buscar leads"
+              className="py-4"
+            />
           )}
         </div>
       )}

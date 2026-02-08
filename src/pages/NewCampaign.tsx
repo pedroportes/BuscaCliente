@@ -382,6 +382,8 @@ export default function NewCampaign() {
             </Card>
           )}
 
+
+
           {/* Step 3 - Revisar */}
           {currentStep === 3 && (
             <Card className="shadow-lg">
@@ -435,6 +437,8 @@ export default function NewCampaign() {
                       })}
                     </div>
                   </div>
+
+
 
                   <div className="pt-4 border-t">
                     <div className="flex items-center justify-between">

@@ -4,12 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Send, 
-  Phone, 
-  Mail, 
-  MapPin, 
-  Star, 
+import {
+  Send,
+  Phone,
+  Mail,
+  MapPin,
+  Star,
   ExternalLink,
   MessageCircle,
   RefreshCw,
@@ -39,7 +39,7 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
   const { data: leadMessages = [], isLoading, refetch } = useLeadMessages(lead?.id);
   const { status: evolutionStatus, isConfigured: isEvolutionConfigured, sendWhatsAppMessage } = useEvolutionApi();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
+
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
 
@@ -71,7 +71,7 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
         .insert(messageData)
         .select()
         .single();
-      
+
       if (error) throw error;
       return data;
     },
@@ -82,19 +82,19 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
 
   const handleSendMessage = async () => {
     if (!lead || !newMessage.trim()) {
-      toast({ 
-        title: 'Mensagem vazia', 
+      toast({
+        title: 'Mensagem vazia',
         description: 'Digite uma mensagem para enviar',
-        variant: 'destructive' 
+        variant: 'destructive'
       });
       return;
     }
 
     if (!lead.phone) {
-      toast({ 
-        title: 'Lead sem telefone', 
+      toast({
+        title: 'Lead sem telefone',
         description: 'Este lead não possui número de telefone cadastrado',
-        variant: 'destructive' 
+        variant: 'destructive'
       });
       return;
     }
@@ -102,42 +102,73 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
     setIsSending(true);
 
     try {
-      // First, save the message to the database
-      const savedMessage = await createMessage.mutateAsync({
-        lead_id: lead.id,
-        body: newMessage.trim(),
-        channel: 'whatsapp',
-        status: 'pending',
-        direction: 'outbound',
-      });
+      // Try to save message to database (non-blocking if fails)
+      let savedMessageId: string | null = null;
+      try {
+        const savedMessage = await createMessage.mutateAsync({
+          lead_id: lead.id,
+          body: newMessage.trim(),
+          channel: 'whatsapp',
+          status: 'pending',
+          direction: 'outbound',
+        });
+        savedMessageId = savedMessage?.id || null;
+      } catch (dbError) {
+        console.warn('Erro ao salvar mensagem no banco:', dbError);
+        // Continue anyway - we'll still try to send
+      }
 
       // Then try to send via Evolution API
+      console.log('Evolution API Debug:', {
+        isEvolutionConfigured,
+        evolutionStatus,
+        willUseAPI: isEvolutionConfigured && evolutionStatus.connected
+      });
+
       if (isEvolutionConfigured && evolutionStatus.connected) {
+        console.log('Tentando enviar via Evolution API para:', lead.phone);
         const success = await sendWhatsAppMessage(lead.phone, newMessage.trim());
-        
-        if (success) {
+
+        if (success && savedMessageId) {
           // Update message status to sent
           await supabase
             .from('messages')
             .update({ status: 'sent', sent_at: new Date().toISOString() })
-            .eq('id', savedMessage.id);
-          
-          toast({ 
+            .eq('id', savedMessageId);
+
+          toast({
             title: 'Mensagem enviada!',
             description: `Enviada para ${lead.business_name}`,
           });
-        } else {
+        } else if (!success) {
           // Update message status to failed
-          await supabase
-            .from('messages')
-            .update({ status: 'failed', error_message: 'Falha no envio via Evolution API' })
-            .eq('id', savedMessage.id);
+          if (savedMessageId) {
+            await supabase
+              .from('messages')
+              .update({ status: 'failed', error_message: 'Falha no envio via Evolution API' })
+              .eq('id', savedMessageId);
+          }
+
+          // Fallback: open WhatsApp Web
+          const phoneNumber = lead.phone.replace(/\D/g, '');
+          const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(newMessage.trim())}`;
+          window.open(whatsappUrl, '_blank');
+
+          toast({
+            title: 'Abrindo WhatsApp Web',
+            description: 'Falha na API, abrindo WhatsApp Web para envio manual',
+            variant: 'default',
+          });
         }
       } else {
-        // Evolution API not configured - mark as pending
-        toast({ 
-          title: 'Mensagem salva',
-          description: 'Configure a Evolution API para enviar via WhatsApp',
+        // Evolution API not configured - open WhatsApp Web
+        const phoneNumber = lead.phone.replace(/\D/g, '');
+        const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(newMessage.trim())}`;
+        window.open(whatsappUrl, '_blank');
+
+        toast({
+          title: 'Abrindo WhatsApp Web',
+          description: 'Configure a Evolution API para envio automático',
           variant: 'default',
         });
       }
@@ -147,11 +178,27 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
       onMessageSent?.();
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
-      toast({ 
-        title: 'Erro ao enviar',
-        description: errorMessage,
-        variant: 'destructive',
-      });
+      console.error('Erro ao enviar WhatsApp:', error);
+
+      // Fallback: open WhatsApp Web even on error
+      if (lead.phone) {
+        const phoneNumber = lead.phone.replace(/\D/g, '');
+        const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(newMessage.trim())}`;
+        window.open(whatsappUrl, '_blank');
+
+        toast({
+          title: 'Abrindo WhatsApp Web',
+          description: 'Erro no envio automático, abrindo WhatsApp Web',
+          variant: 'default',
+        });
+        setNewMessage('');
+      } else {
+        toast({
+          title: 'Erro ao enviar',
+          description: errorMessage,
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsSending(false);
     }
@@ -176,7 +223,7 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
-    
+
     if (date.toDateString() === today.toDateString()) return 'Hoje';
     if (date.toDateString() === yesterday.toDateString()) return 'Ontem';
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -231,7 +278,7 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
               </div>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-1">
             <Badge variant="secondary" className="text-[10px] h-5 px-2">
               Mensagens: {leadMessages.length}
@@ -255,7 +302,7 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
             )}
           </div>
         </div>
-        
+
         {/* Compact Contact Info */}
         <div className="flex flex-wrap gap-1.5 mt-2">
           {lead.phone && (
@@ -304,39 +351,39 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
                     {date}
                   </div>
                 </div>
-                
+
                 {/* Messages for this date */}
                 <div className="space-y-2">
                   {messages.map((message) => {
                     const isOutbound = message.direction === 'outbound';
                     return (
-                      <div 
-                        key={message.id} 
+                      <div
+                        key={message.id}
                         className={cn("flex", isOutbound ? "justify-end" : "justify-start")}
                       >
-                        <div 
+                        <div
                           className={cn(
                             "max-w-[75%] rounded-xl px-3 py-2 shadow-sm",
-                            isOutbound 
-                              ? "bg-primary text-primary-foreground rounded-br-sm" 
+                            isOutbound
+                              ? "bg-primary text-primary-foreground rounded-br-sm"
                               : "bg-muted rounded-bl-sm"
                           )}
                         >
                           {/* Channel indicator for outbound */}
                           {isOutbound && (
                             <div className="flex items-center gap-1 mb-0.5 opacity-70">
-                              <ChannelIcon 
-                                channel={message.channel as any} 
-                                className="w-3 h-3" 
+                              <ChannelIcon
+                                channel={message.channel as any}
+                                className="w-3 h-3"
                               />
                               <span className="text-[10px] capitalize">{message.channel}</span>
                             </div>
                           )}
-                          
+
                           <p className="text-sm whitespace-pre-wrap break-words">
                             {message.body}
                           </p>
-                          
+
                           <div className={cn(
                             "flex items-center gap-1.5 mt-0.5",
                             isOutbound ? "justify-end" : "justify-start"
@@ -345,12 +392,12 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
                               {formatMessageTime(message.sent_at || message.created_at)}
                             </span>
                             {isOutbound && (
-                              <MessageStatusBadge 
+                              <MessageStatusBadge
                                 status={message.status as any}
                               />
                             )}
                           </div>
-                          
+
                           {message.status === 'failed' && message.error_message && (
                             <p className="text-[10px] text-destructive mt-0.5 opacity-80">
                               {message.error_message}
@@ -376,7 +423,7 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
             WhatsApp desconectado - mensagens serão salvas mas não enviadas
           </div>
         )}
-        
+
         <div className="flex gap-2 items-end">
           <Textarea
             placeholder="Digite sua mensagem..."
@@ -386,7 +433,7 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
             className="min-h-[40px] max-h-24 resize-none text-sm"
             rows={1}
           />
-          <Button 
+          <Button
             onClick={handleSendMessage}
             disabled={!newMessage.trim() || isSending}
             size="icon"
@@ -399,7 +446,7 @@ export function ConversationView({ lead, onMessageSent }: ConversationViewProps)
             )}
           </Button>
         </div>
-        
+
         <p className="text-[10px] text-muted-foreground mt-1">
           Enter para enviar • Shift+Enter para nova linha
         </p>

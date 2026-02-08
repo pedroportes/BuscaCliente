@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -37,7 +37,9 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useEvolutionApi } from '@/hooks/useEvolutionApi';
 import { cn } from '@/lib/utils';
+import { BulkEmailModal } from "@/components/campaigns/BulkEmailModal";
 
 const stageConfig: Record<string, { label: string; className: string }> = {
   new: { label: 'Novo', className: 'bg-muted text-muted-foreground' },
@@ -51,6 +53,7 @@ const stageConfig: Record<string, { label: string; className: string }> = {
 export default function LeadDetail() {
   const { id } = useParams();
   const { toast } = useToast();
+  const { status: evolutionStatus, sendWhatsAppMessage } = useEvolutionApi();
   const [whatsappMethod, setWhatsappMethod] = useState<'app' | 'api'>('app');
   const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
   const [generatedCopy, setGeneratedCopy] = useState('');
@@ -66,10 +69,11 @@ export default function LeadDetail() {
 
   /* Copy Generator State */
   const [copyChannel, setCopyChannel] = useState<'whatsapp' | 'email'>('whatsapp');
+  const [showEmailModal, setShowEmailModal] = useState(false);
 
 
 
-  const { data: lead, isLoading } = useQuery({
+  const { data: lead, isLoading, refetch } = useQuery({
     queryKey: ['lead', id],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -83,7 +87,96 @@ export default function LeadDetail() {
     },
     enabled: !!id,
   });
-  const [stage, setStage] = useState<string>(lead?.stage || 'new');
+
+  // Query para notas do lead
+  const { data: notes = [], refetch: refetchNotes } = useQuery({
+    queryKey: ['lead_notes', id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('lead_notes')
+        .select('*')
+        .eq('lead_id', id)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!id,
+  });
+
+  // Query para atividades do lead (incluindo mensagens)
+  const { data: activities = [] } = useQuery({
+    queryKey: ['lead_activities', id],
+    queryFn: async () => {
+      // Buscar atividades
+      const { data: actData } = await supabase
+        .from('lead_activities')
+        .select('*')
+        .eq('lead_id', id)
+        .order('created_at', { ascending: false });
+
+      // Buscar mensagens
+      const { data: msgData } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('lead_id', id)
+        .order('created_at', { ascending: false });
+
+      // Combinar e formatar
+      const combined: any[] = [];
+
+      actData?.forEach(a => {
+        combined.push({
+          id: a.id,
+          type: a.activity_type,
+          date: a.created_at,
+          metadata: a.metadata
+        });
+      });
+
+      msgData?.forEach(m => {
+        combined.push({
+          id: m.id,
+          type: m.channel === 'whatsapp' ? 'whatsapp_sent' : 'email_sent',
+          date: m.created_at,
+          status: m.status,
+          body: m.body?.substring(0, 50) + (m.body?.length > 50 ? '...' : '')
+        });
+      });
+
+      // Ordenar por data
+      return combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    },
+    enabled: !!id,
+  });
+
+  const [isSavingNote, setIsSavingNote] = useState(false);
+
+  const handleSaveNote = async () => {
+    if (!newNote.trim() || !lead?.id) return;
+    setIsSavingNote(true);
+    try {
+      const { error } = await supabase.from('lead_notes').insert({
+        lead_id: lead.id,
+        content: newNote.trim(),
+      });
+      if (error) throw error;
+      setNewNote('');
+      refetchNotes();
+      toast({ title: 'Nota salva!' });
+    } catch (e: any) {
+      toast({ title: 'Erro ao salvar nota', description: e.message, variant: 'destructive' });
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+  const [stage, setStage] = useState<string>('new');
+
+  // Sincronizar estado com dados do lead
+  useEffect(() => {
+    if (lead?.stage) {
+      setStage(lead.stage);
+    }
+  }, [lead?.stage]);
 
   // Initialize edit state when lead data loads
   useCallback(() => {
@@ -135,6 +228,39 @@ export default function LeadDetail() {
   const cancelEdit = () => {
     setEditedLead(lead);
     setIsEditing(false);
+  };
+
+  const handleStageChange = async (newStage: string) => {
+    if (!lead) return;
+
+    try {
+      console.log('Updating stage for lead:', lead.id, 'to:', newStage);
+
+      const { data, error } = await supabase
+        .from('leads')
+        .update({ stage: newStage })
+        .eq('id', lead.id)
+        .select();
+
+      console.log('Supabase response:', { data, error });
+
+      if (error) throw error;
+
+      setStage(newStage);
+      await refetch(); // Recarrega os dados do lead
+
+      toast({
+        title: 'Estágio atualizado!',
+        description: `Lead movido para ${stageConfig[newStage]?.label || newStage}`,
+      });
+    } catch (error: any) {
+      console.error('Error updating stage:', error);
+      toast({
+        title: 'Erro ao atualizar estágio',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
   };
 
 
@@ -193,22 +319,67 @@ export default function LeadDetail() {
   const handleSendWhatsApp = async () => {
     if (!lead?.phone || !generatedCopy) return;
 
-    if (whatsappMethod === 'app') {
+    // Helper function to open WhatsApp Web
+    const openWhatsAppWeb = () => {
       const phone = lead.phone.replace(/\D/g, '');
       const url = `https://wa.me/55${phone}?text=${encodeURIComponent(generatedCopy)}`;
       window.open(url, '_blank');
+    };
+
+    if (whatsappMethod === 'api') {
+      // Try to send via Evolution API
+      if (evolutionStatus.connected) {
+        const success = await sendWhatsAppMessage(lead.phone, generatedCopy);
+
+        if (success) {
+          // Save message record
+          supabase.from('messages').insert({
+            lead_id: lead.id,
+            body: generatedCopy,
+            channel: 'whatsapp',
+            status: 'sent',
+            direction: 'outbound',
+            sent_at: new Date().toISOString(),
+          }).then(({ error }) => {
+            if (error) console.warn('Erro ao salvar mensagem:', error);
+          });
+          return; // Success - message already shows toast
+        } else {
+          // API failed - fallback to WhatsApp Web
+          openWhatsAppWeb();
+          toast({
+            title: 'Abrindo WhatsApp Web',
+            description: 'Falha na API, abrindo WhatsApp Web',
+            variant: 'default',
+          });
+        }
+      } else {
+        // Not connected - fallback
+        openWhatsAppWeb();
+        toast({
+          title: 'WhatsApp não conectado',
+          description: 'Conecte nas configurações ou use o modo App',
+          variant: 'default',
+        });
+      }
+    } else {
+      // Manual app mode
+      openWhatsAppWeb();
       toast({
         title: 'WhatsApp aberto!',
         description: 'Continue o envio no aplicativo.',
       });
-    } else {
-      // API fallback logic
-      toast({
-        title: 'Envio via API',
-        description: 'Funcionalidade em desenvolvimento. Use o envio pelo App por enquanto.',
-        variant: 'default',
+
+      // Save message as pending
+      supabase.from('messages').insert({
+        lead_id: lead.id,
+        body: generatedCopy,
+        channel: 'whatsapp',
+        status: 'pending',
+        direction: 'outbound',
+      }).then(({ error }) => {
+        if (error) console.warn('Erro ao salvar mensagem:', error);
       });
-      console.log('API send requested', { phone: lead.phone, message: generatedCopy });
     }
   };
 
@@ -285,6 +456,18 @@ export default function LeadDetail() {
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
 
+      // Salvar registro da mensagem enviada (não-bloqueante)
+      supabase.from('messages').insert({
+        lead_id: lead.id,
+        body: generatedCopy,
+        channel: 'email',
+        status: 'sent',
+        direction: 'outbound',
+        sent_at: new Date().toISOString(),
+      }).then(({ error: insertError }) => {
+        if (insertError) console.warn('Erro ao salvar mensagem:', insertError);
+      });
+
       toast({
         title: 'Email enviado com sucesso!',
         description: 'O email foi enviado via Resend.',
@@ -293,6 +476,17 @@ export default function LeadDetail() {
       setEmailDialogOpen(false);
     } catch (apiError: any) {
       console.error('Erro ao enviar email via API:', apiError);
+
+      // Salvar registro como pendente/manual (não-bloqueante)
+      supabase.from('messages').insert({
+        lead_id: lead.id,
+        body: generatedCopy,
+        channel: 'email',
+        status: 'pending',
+        direction: 'outbound',
+      }).then(({ error: insertError }) => {
+        if (insertError) console.warn('Erro ao salvar mensagem:', insertError);
+      });
 
       toast({
         title: "Envio automático não realizado",
@@ -396,7 +590,7 @@ export default function LeadDetail() {
                     </Button>
                   </div>
                 )}
-                <Select value={currentStage} onValueChange={setStage}>
+                <Select value={currentStage} onValueChange={handleStageChange}>
                   <SelectTrigger className="w-32 sm:w-40">
                     <SelectValue />
                   </SelectTrigger>
@@ -600,17 +794,20 @@ export default function LeadDetail() {
                   {/* AI Copy Generator */}
                   <div className="space-y-4">
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <h3 className="font-semibold flex items-center gap-2">
-                        <Sparkles className="w-5 h-5 text-primary" />
-                        Gerador de Copy com IA
-                      </h3>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold flex items-center gap-2">
+                          <Sparkles className="w-5 h-5 text-primary" />
+                          Gerador de Copy com IA
+                        </h3>
+                      </div>
+
                       <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto items-center">
                         <div className="flex bg-muted p-1 rounded-lg">
                           <Button
                             variant={copyChannel === 'whatsapp' ? 'default' : 'ghost'}
                             size="sm"
                             onClick={() => setCopyChannel('whatsapp')}
-                            className="h-7 text-xs px-3 shadow-none hover:bg-muted-foreground/10"
+                            className="h-8 rounded-r-none"
                           >
                             WhatsApp
                           </Button>
@@ -618,40 +815,32 @@ export default function LeadDetail() {
                             variant={copyChannel === 'email' ? 'default' : 'ghost'}
                             size="sm"
                             onClick={() => setCopyChannel('email')}
-                            className="h-7 text-xs px-3 shadow-none hover:bg-muted-foreground/10"
+                            className="h-8 rounded-l-none border-l"
                           >
                             Email
                           </Button>
                         </div>
 
-                        <Button
-                          onClick={handleEnrichLead}
-                          disabled={isEnriching}
-                          variant="outline"
-                          className="gap-2 flex-1 sm:flex-none"
-                        >
-                          {isEnriching ? (
-                            <span className="flex items-center gap-2">
-                              <span className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                              Enriquecendo...
-                            </span>
-                          ) : (
-                            <>
-                              <Zap className="w-4 h-4" />
-                              Enriquecer
-                            </>
-                          )}
+                        <Button variant="outline" size="sm" onClick={handleEnrichLead} disabled={isEnriching} className="h-8">
+                          {isEnriching ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Zap className="w-4 h-4 mr-2" />}
+                          Enriquecer
                         </Button>
+
                         <Button
-                          onClick={handleGenerateCopy}
-                          disabled={isGenerating}
-                          className="gradient-primary flex-1 sm:flex-none"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setShowEmailModal(true)}
+                          className="h-8 gap-2 bg-indigo-100 text-indigo-700 hover:bg-indigo-200 border border-indigo-200"
                         >
+                          <Mail className="w-4 h-4" />
+                          Sequência
+                        </Button>
+
+                        <Button onClick={handleGenerateCopy} disabled={isGenerating} size="sm" className="h-8">
                           {isGenerating ? (
-                            <span className="flex items-center gap-2">
-                              <span className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                              Gerando...
-                            </span>
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin mr-2" /> Gerando...
+                            </>
                           ) : (
                             `Gerar ${copyChannel === 'whatsapp' ? 'WhatsApp' : 'Email'}`
                           )}
@@ -660,56 +849,52 @@ export default function LeadDetail() {
                     </div>
 
                     <Textarea
-                      placeholder="Clique em 'Gerar Mensagem' para criar uma copy personalizada com IA..."
                       value={generatedCopy}
                       onChange={(e) => setGeneratedCopy(e.target.value)}
-                      className="min-h-[200px]"
+                      placeholder="Clique em 'Gerar Mensagem' para criar uma copy personalizada com IA..."
+                      className="min-h-[150px] p-4 text-base"
                     />
 
-                    <div className="flex flex-col sm:flex-row gap-2">
-                      <div className="flex flex-1 gap-0">
-                        <Select value={whatsappMethod} onValueChange={(v: 'app' | 'api') => setWhatsappMethod(v)}>
-                          <SelectTrigger className="w-[100px] rounded-r-none border-r-0 focus:ring-1 focus:ring-primary focus:z-10 bg-muted/50">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="app">
-                              <span className="flex items-center gap-2">
-                                <MessageCircle className="w-4 h-4" /> App
-                              </span>
-                            </SelectItem>
-                            <SelectItem value="api">
-                              <span className="flex items-center gap-2">
-                                <Zap className="w-4 h-4" /> Evol.
-                              </span>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                    <div className="flex flex-col sm:flex-row justify-between items-center bg-muted/50 p-2 rounded-lg gap-2">
+                      <Select value={whatsappMethod} onValueChange={(v: 'app' | 'api') => setWhatsappMethod(v)}>
+                        <SelectTrigger className="w-40 h-8 border-0 bg-transparent focus:ring-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="app">App (Manual)</SelectItem>
+                          <SelectItem value="api">API (Automático)</SelectItem>
+                        </SelectContent>
+                      </Select>
+
+                      <div className="flex gap-2 w-full sm:w-auto justify-end">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            navigator.clipboard.writeText(generatedCopy);
+                            toast({ title: 'Copiado!' });
+                          }}
+                          disabled={!generatedCopy}
+                        >
+                          <span className="sr-only">Copiar</span>
+                          📋
+                        </Button>
+
+                        <Button variant="ghost" onClick={handleSendWhatsApp} className="gap-2" disabled={!generatedCopy}>
+                          <Send className="w-4 h-4" />
+                          Enviar WhatsApp
+                        </Button>
 
                         <Button
-                          className="flex-1 gap-2 rounded-l-none"
-                          disabled={!generatedCopy || isSendingWhatsApp}
-                          onClick={handleSendWhatsApp}
-                          variant={whatsappMethod === 'api' ? 'default' : 'outline'}
+                          variant="ghost"
+                          className="gap-2 text-muted-foreground hover:text-foreground"
+                          onClick={handleOpenEmailDialog}
+                          disabled={!lead.email}
                         >
-                          {isSendingWhatsApp ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Send className="w-4 h-4" />
-                          )}
-                          {whatsappMethod === 'api' ? 'Enviar' : 'Enviar'}
+                          <Mail className="w-4 h-4" />
+                          Enviar Email
                         </Button>
                       </div>
-
-                      <Button
-                        variant="outline"
-                        className="flex-1 gap-2"
-                        disabled={!generatedCopy}
-                        onClick={handleOpenEmailDialog}
-                      >
-                        <Mail className="w-4 h-4" />
-                        Enviar Email
-                      </Button>
                     </div>
                   </div>
                 </TabsContent>
@@ -722,35 +907,80 @@ export default function LeadDetail() {
                       onChange={(e) => setNewNote(e.target.value)}
                       className="min-h-[80px]"
                     />
-                    <Button className="gradient-primary self-end">
-                      <Send className="w-4 h-4" />
+                    <Button
+                      className="gradient-primary self-end"
+                      onClick={handleSaveNote}
+                      disabled={isSavingNote || !newNote.trim()}
+                    >
+                      {isSavingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                     </Button>
                   </div>
 
                   <div className="space-y-3">
-                    <div className="text-center py-8 text-muted-foreground text-sm">
-                      Nenhuma nota ainda. Adicione a primeira!
-                    </div>
+                    {notes.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground text-sm">
+                        Nenhuma nota ainda. Adicione a primeira!
+                      </div>
+                    ) : (
+                      notes.map((note: any) => (
+                        <Card key={note.id} className="p-3 bg-muted/20">
+                          <p className="text-sm text-foreground/90 whitespace-pre-wrap">{note.content}</p>
+                          <p className="text-xs text-muted-foreground mt-2">
+                            {new Date(note.created_at).toLocaleString('pt-BR')}
+                          </p>
+                        </Card>
+                      ))
+                    )}
                   </div>
                 </TabsContent>
 
                 <TabsContent value="activity" className="mt-0">
                   <div className="space-y-4">
-                    <div className="flex items-center gap-3 p-3 border-l-2 border-primary/30">
-                      <Plus className="w-4 h-4 text-primary" />
-                      <div>
-                        <p className="text-sm font-medium">Lead criado</p>
-                        <p className="text-xs text-muted-foreground">
-                          {lead.created_at ? new Date(lead.created_at).toLocaleDateString('pt-BR') : '-'}
-                        </p>
+                    {activities.map((activity: any) => (
+                      <div key={activity.id} className="flex items-start gap-3 p-3 border-l-2 border-primary/30 bg-muted/10 rounded-r-md">
+                        <div className="mt-1">
+                          {activity.type === 'created' && <Plus className="w-4 h-4 text-primary" />}
+                          {activity.type === 'whatsapp_sent' && <MessageCircle className="w-4 h-4 text-green-500" />}
+                          {activity.type === 'email_sent' && <Mail className="w-4 h-4 text-blue-500" />}
+                          {activity.type === 'stage_changed' && <Zap className="w-4 h-4 text-yellow-500" />}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-start">
+                            <p className="text-sm font-medium">
+                              {activity.type === 'created' && 'Lead criado'}
+                              {activity.type === 'whatsapp_sent' && 'WhatsApp enviado'}
+                              {activity.type === 'email_sent' && 'Email enviado'}
+                              {activity.type === 'stage_changed' && 'Estágio alterado'}
+                            </p>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(activity.date).toLocaleString('pt-BR')}
+                            </span>
+                          </div>
+                          {activity.body && (
+                            <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                              "{activity.body}"
+                            </p>
+                          )}
+                          {activity.metadata && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {JSON.stringify(activity.metadata)}
+                            </p>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    ))}
+
+                    {activities.length === 0 && (
+                      <div className="text-center py-8 text-muted-foreground text-sm">
+                        Nenhuma atividade registrada.
+                      </div>
+                    )}
                   </div>
                 </TabsContent>
               </div>
             </Tabs>
           </Card>
-        </div>
+        </div >
 
         {/* Sidebar */}
         <div className="space-y-6">
@@ -821,7 +1051,8 @@ export default function LeadDetail() {
               <Textarea
                 value={generatedCopy}
                 onChange={(e) => setGeneratedCopy(e.target.value)}
-                className="min-h-[150px]"
+                placeholder="A mensagem gerada aparecerá aqui..."
+                className="min-h-[100px] text-base resize-none"
               />
             </div>
           </div>
@@ -844,6 +1075,12 @@ export default function LeadDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <BulkEmailModal
+        open={showEmailModal}
+        onOpenChange={setShowEmailModal}
+        selectedLeads={lead ? [lead.id] : []}
+        onSuccess={() => toast({ title: "Sequência agendada com sucesso!" })}
+      />
     </AppLayout>
   );
 }

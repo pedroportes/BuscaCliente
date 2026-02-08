@@ -2,6 +2,7 @@ import { Card } from '@/components/ui/card';
 import { UserPlus, CheckCircle, Mail, Star, FileText, Loader2 } from 'lucide-react';
 import { useRecentActivity } from '@/hooks/useRecentActivity';
 import { cn } from '@/lib/utils';
+import { EmptyState } from '@/components/ui/empty-state';
 
 const activityIcons: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
   lead_added: { icon: UserPlus, color: 'text-primary', bg: 'bg-primary/10' },
@@ -30,9 +31,9 @@ export function RecentActivity() {
           {(activities || []).map((activity, index) => {
             const config = activityIcons[activity.type] || activityIcons.lead_added;
             const Icon = config.icon;
-            
+
             return (
-              <div 
+              <div
                 key={activity.id}
                 className="flex items-start gap-3 animate-slide-in"
                 style={{ animationDelay: `${index * 50}ms` }}
@@ -49,9 +50,12 @@ export function RecentActivity() {
           })}
 
           {(!activities || activities.length === 0) && (
-            <div className="text-center py-8 text-muted-foreground text-sm">
-              Nenhuma atividade recente
-            </div>
+            <EmptyState
+              icon={FileText}
+              title="Sem atividades"
+              description="As atividades recentes aparecerão aqui"
+              className="py-4"
+            />
           )}
         </div>
       )}
