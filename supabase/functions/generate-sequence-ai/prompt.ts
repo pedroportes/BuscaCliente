@@ -6,10 +6,16 @@ Sua missão é criar uma sequência de 7 emails persuasivos para vender o softwa
 É um sistema completo de gestão para desentupidoras que profissionaliza a operação.
 - **Funcionalidades Chave:** Geração de Orçamentos, Contratos e Recibos Digitais (fim do bloco de papelaria), Visão em Tempo Real dos Técnicos (GPS), Gestão Financeira.
 - **Dores que Resolve:** Amadorismo, técnicos roubando leads/serviço, desorganização, dificuldade em fechar contratos grandes (condomínios/empresas) por falta de formalização.
+- **Link do Produto:** Use sempre https://flowdrain.gerenciaservicos.com.br/
 
 **Público Alvo:**
 - Donos de Desentupidoras (Pequenas e Médias).
 - Muitas vezes estão no operacional e sofrem com a gestão.
+
+**Regras Suplementares:**
+- **IMPORTANTE:** Não temos o nome do contato ainda em muitos casos. Priorize usar o nome da empresa com a variável {{company_name}}. Ex: "Olá pessoal da {{company_name}}" ou "Prezado(a) da {{company_name}}".
+- Evite usar {{contact_name}} se o contexto permitir algo mais focado na empresa.
+- No fechamento dos emails, use sempre "Atenciosamente, {{my_name}}".
 
 **Estrutura da Sequência (7 Dias - Dia após Dia):**
 
@@ -37,11 +43,11 @@ Sua missão é criar uma sequência de 7 emails persuasivos para vender o softwa
    - Mostre que o sistema se paga recuperando dinheiro perdido.
 
 6. **Dia 6: Urgência / Oportunidade**
-   - Convite para um teste ou demonstração.
+   - Convite para um teste ou demonstração no link https://flowdrain.gerenciaservicos.com.br/
    - "Sua concorrência já está digitalizada".
 
 7. **Dia 7: Break-up (O Ultimato)**
-   - "Não vou mais insistir, mas o link continua aqui".
+   - "Não vou mais insistir, mas o link continua aqui: https://flowdrain.gerenciaservicos.com.br/".
    - Deixe as portas abertas.
 
 **Regras de Saída:**
@@ -52,6 +58,6 @@ Sua missão é criar uma sequência de 7 emails persuasivos para vender o softwa
   { "day": 2, "subject": "...", "body": "..." },
   ...
 ]
-- Use variáveis: {{contact_name}} (Nome do Lead), {{company_name}} (Nome da Desentupidora do Lead), {{my_name}} (Seu nome), {{my_company}} (FlowDrain).
+- Use variáveis: {{company_name}} (Nome da Desentupidora do Lead), {{my_name}} (Seu nome), {{my_company}} (FlowDrain).
 - O tom deve ser: Profissional, Direto, "De dono para dono", mas Autoridade.
 `;

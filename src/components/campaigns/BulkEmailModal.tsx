@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, CalendarClock, AlertCircle } from 'lucide-react';
+import { Loader2, CalendarClock, AlertCircle, Wand2, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -22,6 +22,7 @@ export function BulkEmailModal({ open, onOpenChange, selectedLeads, onSuccess }:
     const [selectedSequenceId, setSelectedSequenceId] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
     const [isFetching, setIsFetching] = useState(false);
+    const [isCreatingSequence, setIsCreatingSequence] = useState(false);
 
     useEffect(() => {
         if (open) {
@@ -36,60 +37,158 @@ export function BulkEmailModal({ open, onOpenChange, selectedLeads, onSuccess }:
         setIsFetching(false);
     };
 
+    const handleAutoCreateSequence = async () => {
+        setIsCreatingSequence(true);
+        try {
+            // 1. Get user's company_id
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('Usuário não autenticado');
+
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('company_id')
+                .eq('id', user.id)
+                .single();
+
+            const companyId = profile?.company_id;
+
+            // 2. Generate sequence via AI
+            toast({ title: '🤖 Gerando sequência com IA...', description: 'Aguarde alguns segundos.' });
+
+            const { data: aiData, error: aiError } = await supabase.functions.invoke('generate-sequence-ai', {
+                body: {
+                    niche: 'Desentupidora',
+                    audience: 'Dono de Pequena Empresa',
+                    tone: 'Profissional e Direto'
+                }
+            });
+
+            if (aiError) throw aiError;
+
+            if (!aiData.sequence || !Array.isArray(aiData.sequence)) {
+                throw new Error('Resposta inválida da IA');
+            }
+
+            const steps = aiData.sequence;
+            console.log('IA gerou', steps.length, 'passos');
+
+            // 3. Create sequence in database
+            const sequenceName = `Prospecção FlowDrain - ${new Date().toLocaleDateString('pt-BR')}`;
+
+            const { data: seqData, error: seqError } = await supabase
+                .from('engagement_sequences')
+                .insert({
+                    name: sequenceName,
+                    description: 'Sequência gerada automaticamente via IA',
+                    is_active: true,
+                    company_id: companyId,
+                    steps: [] // Required column
+                })
+                .select()
+                .single();
+
+            if (seqError) throw seqError;
+
+            // 4. Create steps in database
+            const stepsToInsert = steps.map((step: any, index: number) => ({
+                sequence_id: seqData.id,
+                step_order: index + 1,
+                type: 'email',
+                delay_days: step.day,
+                content: {
+                    subject: step.subject,
+                    body: step.body
+                }
+            }));
+
+            const { error: stepsError } = await supabase
+                .from('sequence_steps')
+                .insert(stepsToInsert);
+
+            if (stepsError) throw stepsError;
+
+            // 5. Refresh sequences list and auto-select the new one
+            await fetchSequences();
+            setSelectedSequenceId(seqData.id);
+
+            toast({
+                title: '✅ Sequência criada!',
+                description: `${steps.length} emails prontos para envio. Clique em "Iniciar Agendamento".`,
+            });
+
+        } catch (error: any) {
+            console.error('Erro ao criar sequência:', error);
+            toast({
+                title: 'Erro ao criar sequência',
+                description: error.message || 'Tente novamente.',
+                variant: 'destructive',
+            });
+        } finally {
+            setIsCreatingSequence(false);
+        }
+    };
+
     const handleSchedule = async () => {
         if (!selectedSequenceId) return;
         setIsLoading(true);
 
         try {
-            // 1. Fetch Steps for the selected sequence
+            // 1. Verify the sequence has steps
             const { data: steps } = await supabase
                 .from('sequence_steps')
-                .select('id, delay_days')
-                .eq('sequence_id', selectedSequenceId)
-                .order('step_order');
+                .select('id')
+                .eq('sequence_id', selectedSequenceId);
 
             if (!steps || steps.length === 0) {
                 throw new Error('Esta sequência não tem passos.');
             }
 
-            // 2. Prepare Payload
-            const queueItems = [];
-            const now = new Date(); // Start date is NOW
+            // 2. Get current user and company
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) throw new Error('Usuário não autenticado');
 
-            for (const leadId of selectedLeads) {
-                for (const step of steps) {
-                    // Calculate scheduled date based on delay
-                    // delay_days = 0 (Immediate), 1 (Next day), etc.
-                    const scheduledFor = new Date(now);
-                    scheduledFor.setDate(scheduledFor.getDate() + (step.delay_days || 0));
-                    // Set to a reasonable time? E.g. 9 AM? 
-                    // For now, let's keep relative to "now" but respect the day.
-                    // If delay=0, assume NOW.
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('company_id')
+                .eq('id', user.id)
+                .single();
 
-                    queueItems.push({
-                        lead_id: leadId,
-                        sequence_step_id: step.id,
-                        status: 'pending',
-                        scheduled_for: scheduledFor.toISOString(),
-                        // marketing_account_id? 
-                    });
+            if (!profile?.company_id) throw new Error('Company não encontrada');
+
+            // 3. Create enrollments in lead_sequences
+            const now = new Date();
+            const enrollments = selectedLeads.map(leadId => ({
+                lead_id: leadId,
+                sequence_id: selectedSequenceId,
+                company_id: profile.company_id,
+                enrolled_by: user.id,
+                current_step: 0,
+                status: 'active',
+                started_at: now.toISOString(),
+                next_step_at: now.toISOString(),
+            }));
+
+            const { error } = await supabase
+                .from('lead_sequences')
+                .insert(enrollments);
+
+            if (error) {
+                if (error.code === '23505') {
+                    throw new Error('Alguns leads já estão inscritos nesta sequência.');
                 }
+                throw error;
             }
 
-            console.log(`Inserting ${queueItems.length} items to queue...`);
-
-            // 3. Batch Insert (Supabase handles batching, but let's be safe with chunking if huge)
-            const chunkSize = 1000;
-            for (let i = 0; i < queueItems.length; i += chunkSize) {
-                const chunk = queueItems.slice(i, i + chunkSize);
-                // @ts-ignore
-                const { error } = await supabase.from('campaign_queue').insert(chunk);
-                if (error) throw error;
+            // 4. Trigger immediate processing
+            try {
+                await supabase.functions.invoke('process-sequence-queue');
+            } catch (e) {
+                console.warn('Could not trigger immediate processing:', e);
             }
 
             toast({
-                title: 'Campanha Agendada!',
-                description: `${selectedLeads.length} leads foram enfileirados. O sistema enviará respeitando o limite diário.`,
+                title: '✅ Sequência Iniciada!',
+                description: `${selectedLeads.length} leads inscritos. O primeiro email será enviado em breve.`,
             });
 
             onOpenChange(false);
@@ -98,7 +197,7 @@ export function BulkEmailModal({ open, onOpenChange, selectedLeads, onSuccess }:
         } catch (error: any) {
             console.error(error);
             toast({
-                title: 'Erro ao agendar',
+                title: 'Erro ao iniciar',
                 description: error.message,
                 variant: 'destructive',
             });
@@ -106,6 +205,8 @@ export function BulkEmailModal({ open, onOpenChange, selectedLeads, onSuccess }:
             setIsLoading(false);
         }
     };
+
+    const hasNoSequences = !isFetching && sequences.length === 0;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -118,30 +219,76 @@ export function BulkEmailModal({ open, onOpenChange, selectedLeads, onSuccess }:
                 </DialogHeader>
 
                 <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                        <Label>Escolha a Sequência</Label>
-                        <Select value={selectedSequenceId} onValueChange={setSelectedSequenceId} disabled={isFetching}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Selecione..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {sequences.length === 0 ? (
-                                    <div className="p-2 text-sm text-muted-foreground text-center">
-                                        Nenhuma sequência encontrada.<br />
-                                        <Button variant="link" className="h-auto p-0 text-primary" onClick={() => onOpenChange(false)}>
-                                            Vá em Engajamento {'>'} Sequências para criar.
-                                        </Button>
-                                    </div>
+                    {hasNoSequences ? (
+                        // No sequences - show auto-create option
+                        <div className="text-center space-y-4 py-4">
+                            <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                                <Sparkles className="w-8 h-8 text-primary" />
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-lg">Nenhuma sequência encontrada</h3>
+                                <p className="text-sm text-muted-foreground mt-1">
+                                    Deixe a IA criar uma sequência de 7 dias automaticamente para você.
+                                </p>
+                            </div>
+                            <Button
+                                onClick={handleAutoCreateSequence}
+                                disabled={isCreatingSequence}
+                                className="w-full gap-2 gradient-primary shadow-glow"
+                            >
+                                {isCreatingSequence ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Gerando com IA...
+                                    </>
                                 ) : (
-                                    sequences.map(s => (
-                                        <SelectItem key={s.id} value={s.id}>
-                                            {s.name} ({s.sequence_steps[0]?.count || 0} passos)
-                                        </SelectItem>
-                                    ))
+                                    <>
+                                        <Wand2 className="w-4 h-4" />
+                                        Criar Sequência Automaticamente
+                                    </>
                                 )}
-                            </SelectContent>
-                        </Select>
-                    </div>
+                            </Button>
+                        </div>
+                    ) : (
+                        // Has sequences - show selection
+                        <>
+                            <div className="space-y-2">
+                                <Label>Escolha a Sequência</Label>
+                                <Select value={selectedSequenceId} onValueChange={setSelectedSequenceId} disabled={isFetching}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Selecione..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {sequences.map(s => (
+                                            <SelectItem key={s.id} value={s.id}>
+                                                {s.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleAutoCreateSequence}
+                                disabled={isCreatingSequence}
+                                className="w-full gap-2"
+                            >
+                                {isCreatingSequence ? (
+                                    <>
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        Gerando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Wand2 className="w-4 h-4" />
+                                        + Criar Nova Sequência com IA
+                                    </>
+                                )}
+                            </Button>
+                        </>
+                    )}
 
                     <Alert className="bg-muted/50">
                         <CalendarClock className="h-4 w-4" />
@@ -155,7 +302,7 @@ export function BulkEmailModal({ open, onOpenChange, selectedLeads, onSuccess }:
 
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                    <Button onClick={handleSchedule} disabled={isLoading || !selectedSequenceId}>
+                    <Button onClick={handleSchedule} disabled={isLoading || !selectedSequenceId || isCreatingSequence}>
                         {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Iniciar Agendamento
                     </Button>

@@ -1,5 +1,5 @@
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,6 +37,69 @@ export function SequenceEditor({ sequenceId, onClose }: SequenceEditorProps) {
     const [isGenerating, setIsGenerating] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [activeTab, setActiveTab] = useState('ai'); // ai | editor
+    const [companyId, setCompanyId] = useState<string | null>(null);
+    const [userName, setUserName] = useState<string>('');
+
+    // Fetch user company_id and existing sequence if editing
+    useEffect(() => {
+        const init = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('company_id, full_name')
+                    .eq('id', user.id)
+                    .single();
+                if (profile) {
+                    setCompanyId(profile.company_id);
+                    setUserName(profile.full_name || '');
+                }
+            }
+
+            if (sequenceId) {
+                try {
+                    // Fetch sequence basic info
+                    const { data: seq, error: seqError } = await supabase
+                        .from('engagement_sequences')
+                        .select('*')
+                        .eq('id', sequenceId)
+                        .single();
+
+                    if (seqError) throw seqError;
+
+                    setName(seq.name);
+                    setDescription(seq.description || '');
+
+                    // Fetch steps
+                    const { data: dbSteps, error: stepsError } = await supabase
+                        .from('sequence_steps')
+                        .select('*')
+                        .eq('sequence_id', sequenceId)
+                        .order('step_order', { ascending: true });
+
+                    if (stepsError) throw stepsError;
+
+                    if (dbSteps && dbSteps.length > 0) {
+                        const formattedSteps = dbSteps.map(s => ({
+                            day: s.delay_days,
+                            subject: s.content.subject,
+                            body: s.content.body
+                        }));
+                        setSteps(formattedSteps);
+                        setActiveTab('editor');
+                    }
+                } catch (error: any) {
+                    console.error('Error loading sequence:', error);
+                    toast({
+                        title: 'Erro ao carregar sequência',
+                        description: error.message,
+                        variant: 'destructive'
+                    });
+                }
+            }
+        };
+        init();
+    }, [sequenceId]);
 
     const handleAddStep = () => {
         setSteps(prev => [...prev, {
@@ -60,17 +123,24 @@ export function SequenceEditor({ sequenceId, onClose }: SequenceEditorProps) {
         setIsGenerating(true);
         try {
             const { data, error } = await supabase.functions.invoke('generate-sequence-ai', {
-                body: { niche, audience, tone }
+                body: { niche, audience, tone, userName }
             });
+
+            console.log('Edge Function response:', { data, error });
 
             if (error) throw error;
 
-            if (data.sequence && Array.isArray(data.sequence)) {
+            if (data?.error) {
+                throw new Error(data.error);
+            }
+
+            if (data?.sequence && Array.isArray(data.sequence) && data.sequence.length > 0) {
                 setSteps(data.sequence);
                 setActiveTab('editor');
-                toast({ title: 'Sequência gerada com sucesso!', description: 'Revise os emails abaixo.' });
+                toast({ title: 'Sequência gerada com sucesso!', description: `${data.sequence.length} emails criados.` });
             } else {
-                throw new Error('Formato de resposta inválido da IA');
+                console.error('Resposta inesperada da IA:', JSON.stringify(data));
+                throw new Error('A IA não retornou emails. Tente novamente.');
             }
         } catch (error: any) {
             console.error('Erro na geração:', error);
@@ -92,26 +162,51 @@ export function SequenceEditor({ sequenceId, onClose }: SequenceEditorProps) {
 
         setIsSaving(true);
         try {
-            // 1. Create Sequence
-            const { data: seqData, error: seqError } = await supabase
-                .from('engagement_sequences')
-                .insert({
-                    name,
-                    description,
-                    type: 'email', // Assuming type column exists or default
-                    is_active: true
-                })
-                .select()
-                .single();
+            let finalSequenceId = sequenceId;
 
-            if (seqError) throw seqError;
+            // 1. Save/Update Sequence
+            if (sequenceId) {
+                const { error: seqError } = await supabase
+                    .from('engagement_sequences')
+                    .update({
+                        name,
+                        description,
+                        company_id: companyId
+                    })
+                    .eq('id', sequenceId);
 
-            // 2. Create Steps
+                if (seqError) throw seqError;
+
+                // Delete existing steps to replace them efficiently
+                const { error: delError } = await supabase
+                    .from('sequence_steps')
+                    .delete()
+                    .eq('sequence_id', sequenceId);
+
+                if (delError) throw delError;
+            } else {
+                const { data: seqData, error: seqError } = await supabase
+                    .from('engagement_sequences')
+                    .insert({
+                        name,
+                        description,
+                        is_active: true,
+                        company_id: companyId,
+                        steps: []
+                    })
+                    .select()
+                    .single();
+
+                if (seqError) throw seqError;
+                finalSequenceId = seqData.id;
+            }
+
+            // 2. Insert Steps
             const stepsToInsert = steps.map((step, index) => ({
-                sequence_id: seqData.id,
+                sequence_id: finalSequenceId,
                 step_order: index + 1,
                 type: 'email',
-                delay_days: step.day, // Using 'day' as delay from start
+                delay_days: step.day,
                 content: {
                     subject: step.subject,
                     body: step.body
@@ -137,6 +232,7 @@ export function SequenceEditor({ sequenceId, onClose }: SequenceEditorProps) {
             setIsSaving(false);
         }
     };
+
 
     return (
         <div className="space-y-6 animate-fade-in">

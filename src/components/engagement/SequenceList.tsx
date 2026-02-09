@@ -2,7 +2,8 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Plus, Wand2, Calendar, MoreVertical, Trash, Edit } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Wand2, Calendar, MoreVertical, Trash, Edit, Play, Users, Pause, CheckCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -12,6 +13,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { SequenceEditor } from './SequenceEditor';
+import { SequenceEnrollModal } from './SequenceEnrollModal';
 
 interface Sequence {
     id: string;
@@ -19,15 +21,18 @@ interface Sequence {
     description: string;
     created_at: string;
     steps_count?: number;
+    active_enrollments?: number;
+    completed_enrollments?: number;
 }
 
 export function SequenceList() {
-    // const supabase = useSupabaseClient();
     const { toast } = useToast();
     const [sequences, setSequences] = useState<Sequence[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isEditing, setIsEditing] = useState(false);
     const [selectedSequenceId, setSelectedSequenceId] = useState<string | null>(null);
+    const [enrollModalOpen, setEnrollModalOpen] = useState(false);
+    const [enrollSequence, setEnrollSequence] = useState<{ id: string; name: string } | null>(null);
 
     useEffect(() => {
         fetchSequences();
@@ -36,17 +41,51 @@ export function SequenceList() {
     const fetchSequences = async () => {
         try {
             setIsLoading(true);
-            // Fetch sequences and count steps
+            // Fetch sequences
             const { data, error } = await supabase
                 .from('engagement_sequences')
-                .select('*, sequence_steps(count)')
+                .select('*')
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
 
+            // Fetch step counts
+            const sequenceIds = data.map((s: any) => s.id);
+            const { data: stepCounts, error: stepsError } = await supabase
+                .from('sequence_steps')
+                .select('sequence_id')
+                .in('sequence_id', sequenceIds);
+
+            const countMap: Record<string, number> = {};
+            if (!stepsError && stepCounts) {
+                stepCounts.forEach((step: any) => {
+                    countMap[step.sequence_id] = (countMap[step.sequence_id] || 0) + 1;
+                });
+            }
+
+            // Fetch enrollment counts
+            const { data: enrollments } = await supabase
+                .from('lead_sequences')
+                .select('sequence_id, status')
+                .in('sequence_id', sequenceIds);
+
+            const activeMap: Record<string, number> = {};
+            const completedMap: Record<string, number> = {};
+            if (enrollments) {
+                enrollments.forEach((e: any) => {
+                    if (e.status === 'active') {
+                        activeMap[e.sequence_id] = (activeMap[e.sequence_id] || 0) + 1;
+                    } else if (e.status === 'completed') {
+                        completedMap[e.sequence_id] = (completedMap[e.sequence_id] || 0) + 1;
+                    }
+                });
+            }
+
             const formatted = data.map((seq: any) => ({
                 ...seq,
-                steps_count: seq.sequence_steps?.[0]?.count || 0
+                steps_count: countMap[seq.id] || 0,
+                active_enrollments: activeMap[seq.id] || 0,
+                completed_enrollments: completedMap[seq.id] || 0,
             }));
 
             setSequences(formatted);
@@ -61,6 +100,7 @@ export function SequenceList() {
             setIsLoading(false);
         }
     };
+
 
     const handleDelete = async (id: string) => {
         if (!confirm('Tem certeza que deseja excluir esta sequência?')) return;
@@ -82,6 +122,11 @@ export function SequenceList() {
                 variant: 'destructive',
             });
         }
+    };
+
+    const openEnrollModal = (sequence: Sequence) => {
+        setEnrollSequence({ id: sequence.id, name: sequence.name });
+        setEnrollModalOpen(true);
     };
 
     if (isEditing) {
@@ -149,15 +194,41 @@ export function SequenceList() {
                             </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="flex items-center justify-between text-sm text-muted-foreground pt-4 border-t">
+                            {/* Stats */}
+                            <div className="flex items-center gap-3 text-sm text-muted-foreground pb-3">
                                 <div className="flex items-center gap-1">
                                     <span className="font-medium text-primary">{sequence.steps_count}</span>
                                     Passos
                                 </div>
-                                <div className="flex items-center gap-1">
+                                {(sequence.active_enrollments ?? 0) > 0 && (
+                                    <Badge variant="default" className="gap-1 text-xs bg-green-500/10 text-green-600 hover:bg-green-500/20">
+                                        <Users className="w-3 h-3" />
+                                        {sequence.active_enrollments} ativos
+                                    </Badge>
+                                )}
+                                {(sequence.completed_enrollments ?? 0) > 0 && (
+                                    <Badge variant="secondary" className="gap-1 text-xs">
+                                        <CheckCircle className="w-3 h-3" />
+                                        {sequence.completed_enrollments}
+                                    </Badge>
+                                )}
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex items-center justify-between pt-3 border-t">
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground">
                                     <Calendar className="w-3 h-3" />
                                     {new Date(sequence.created_at).toLocaleDateString()}
                                 </div>
+                                <Button
+                                    size="sm"
+                                    onClick={() => openEnrollModal(sequence)}
+                                    className="gap-1.5 bg-green-600 hover:bg-green-700 text-white"
+                                    disabled={(sequence.steps_count ?? 0) === 0}
+                                >
+                                    <Play className="w-3.5 h-3.5" />
+                                    Iniciar
+                                </Button>
                             </div>
                         </CardContent>
                     </Card>
@@ -179,6 +250,20 @@ export function SequenceList() {
                     </Card>
                 )}
             </div>
+
+            {/* Enroll Modal */}
+            {enrollSequence && (
+                <SequenceEnrollModal
+                    sequenceId={enrollSequence.id}
+                    sequenceName={enrollSequence.name}
+                    open={enrollModalOpen}
+                    onClose={() => {
+                        setEnrollModalOpen(false);
+                        setEnrollSequence(null);
+                    }}
+                    onEnrolled={fetchSequences}
+                />
+            )}
         </div>
     );
 }

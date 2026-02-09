@@ -9,9 +9,11 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+    // Handle CORS preflight request
     if (req.method === "OPTIONS") {
-        return new Response(null, { headers: corsHeaders });
+        return new Response("ok", { status: 200, headers: corsHeaders });
     }
+
 
     try {
         const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
@@ -24,17 +26,18 @@ serve(async (req) => {
         }
 
         const payload = await req.json();
-        const { niche = "Geral", audience = "Donos de Empresas", tone = "Profissional" } = payload;
+        const { niche = "Geral", audience = "Donos de Empresas", tone = "Profissional", userName = "Especialista FlowDrain" } = payload;
 
         // 1. Preparar o Prompt
         let prompt = SEQUENCE_PROMPT
             .replace("{{niche}}", niche)
             .replace("{{audience}}", audience)
-            .replace("{{tone}}", tone);
+            .replace("{{tone}}", tone)
+            .replace("{{my_name}}", userName);
 
-        console.log("Gerando sequência para:", { niche, audience });
+        console.log("Gerando sequência para:", { niche, audience, userName });
 
-        // 2. Chamar OpenAI/Gemini via Lovable Gateway
+        // 2. Chamar Gemini via Lovable Gateway
         const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
             headers: {
@@ -42,7 +45,7 @@ serve(async (req) => {
                 "Content-Type": "application/json",
             },
             body: JSON.stringify({
-                model: "google/gemini-2.0-flash-exp",
+                model: "google/gemini-2.0-flash",
                 messages: [
                     {
                         role: "system",
